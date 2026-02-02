@@ -1,0 +1,58 @@
+# MCP config (contains database credentials)
+.mcp.json
+
+# Claude local settings
+.claude/
+
+# Windows artifacts
+nul
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+ENV/
+
+# Environment variables (contains credentials)
+.env
+*.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# PyInstaller builds
+build/
+dist/
+output/
+output2/
+*.spec
+*.exe
+
+# Logs and data (generated at runtime)
+logs/
+*.log
+data/xml_facturas/
+data/procesados/
+data/reportes/
+data/alertas/
+
+# Google credentials (sensitive)
+config/credentials.json
+config/token.json
+config/drive_config.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Keep directory structure
+!data/.gitkeep
+!logs/.gitkeep

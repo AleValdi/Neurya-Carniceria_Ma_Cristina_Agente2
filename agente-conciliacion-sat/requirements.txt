@@ -1,0 +1,41 @@
+# Agente de Conciliación SAT-ERP
+# Dependencias de Python
+
+# Conexión a SQL Server
+pyodbc>=4.0.39
+
+# Procesamiento de XML
+lxml>=4.9.0
+
+# Generación de reportes Excel
+openpyxl>=3.1.0
+pandas>=2.0.0
+
+# Manejo de fechas
+python-dateutil>=2.8.0
+
+# Matching difuso de textos
+fuzzywuzzy>=0.18.0
+python-Levenshtein>=0.21.0
+
+# Programación de tareas (para scheduler)
+schedule>=1.2.0
+
+# Configuración
+python-dotenv>=1.0.0
+
+# Logging mejorado
+loguru>=0.7.0
+
+# Para descarga automática del SAT (requiere FIEL)
+requests>=2.31.0
+cryptography>=41.0.0
+cfdiclient>=1.5.0        # Cliente oficial para Web Service SAT
+
+# Soporte PDF
+pymupdf>=1.23.0          # Para extraer texto de PDFs (alternativa: pdfplumber)
+
+# Sincronización Google Drive
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.1.1
+google-auth-oauthlib>=1.1.0

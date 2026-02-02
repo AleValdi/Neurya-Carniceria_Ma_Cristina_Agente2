@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<cfdi:Comprobante Version="4.0" Serie="I" Folio="4843" Fecha="2025-12-26T09:07:06" Sello="T9+Gfn8exA8J5MhM/zLHap1r9jcIQanPT1mc6hUaJGJKbk3RAUW4UBGzPx5tobKeiil8Wy2/03wv5i7dSmJDsE+ma46t6UiQycmXUFtoQw4J3vAMcfezd9IEwgHQYGe1nvsJdsL/A/aLlJuVJs6OHy80vi84nBRc4ntY0C1S1MEbQH2AYVdbIWRsV2dlXVdgIsYGtOZr0DamJUWa9muQgHlSMDz3FPbJcFA5/u8an3S8sVqbDH3kU8iffCoiZju4S7QUOG7T2pW5CojYQiuluZ7Mcu/01m0a+TUI44JIHYCb1iXlmIWQLBC0HCSoD2gS6ooUvuLlfxAKekKOw/XF0g==" FormaPago="99" NoCertificado="00001000000705362077" Certificado="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" CondicionesDePago="7" SubTotal="8510.00" Descuento="0.00" Moneda="MXN" TipoCambio="1" Total="8510.00" TipoDeComprobante="I" Exportacion="01" MetodoPago="PPD" LugarExpedicion="66400" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" xmlns:cfdi="http://www.sat.gob.mx/cfd/4">
+  <cfdi:Emisor Rfc="GAFR9004165E7" Nombre="ROGELIO GARZA FLORES" RegimenFiscal="612" />
+  <cfdi:Receptor Rfc="DCM02072238A" Nombre="DISTRIBUIDORA DE CARNES MARIA CRISTINA" DomicilioFiscalReceptor="66633" RegimenFiscalReceptor="601" UsoCFDI="G01" />
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="50403900" NoIdentificacion="CALABAZA" Cantidad="15" ClaveUnidad="XBX" Unidad="Caja" Descripcion="CAJA DE CALABAZA 1ERA" ValorUnitario="150" Importe="2250.00" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="2250.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50403900" NoIdentificacion="CALABAZA" Cantidad="12" ClaveUnidad="XBX" Unidad="Caja" Descripcion="CAJA DE CALABAZA 1ERA" ValorUnitario="130" Importe="1560.00" Descuento="0.00" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="1560.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50405600" NoIdentificacion="CHILE PIQUIN" Cantidad="3" ClaveUnidad="KGM" Unidad="Kilogramo" Descripcion="CHILE PIQUIN" ValorUnitario="600" Importe="1800.00" Descuento="0.00" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="1800.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50304600" NoIdentificacion="MELON POR CAJA" Cantidad="2" ClaveUnidad="XBX" Unidad="Caja" Descripcion="MELON POR CAJA" ValorUnitario="430" Importe="860.00" Descuento="0.00" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="860.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50304600" NoIdentificacion="MELON POR CAJA" Cantidad="2" ClaveUnidad="XBX" Unidad="Caja" Descripcion="MELON POR CAJA" ValorUnitario="420" Importe="840.00" Descuento="0.00" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="840.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50405631" NoIdentificacion="CHILE MORRÓN AMARILLO" Cantidad="5" ClaveUnidad="KGM" Unidad="Kilogramo" Descripcion="CHILE MORRÓN AMARILLO" ValorUnitario="60" Importe="300.00" Descuento="0.00" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="300.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50405600" NoIdentificacion="MORO" Cantidad="5" ClaveUnidad="KGM" Unidad="Kilogramo" Descripcion="CHILE MORRON ROJO" ValorUnitario="60" Importe="300.00" Descuento="0.00" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="300.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="50406413" NoIdentificacion="CAJA DE CAMOTE" Cantidad="1" ClaveUnidad="XBX" Unidad="Caja" Descripcion="CAJA DE CAMOTE" ValorUnitario="600" Importe="600.00" Descuento="0.00" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="600.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+  </cfdi:Conceptos>
+  <cfdi:Impuestos TotalImpuestosTrasladados="0.00">
+    <cfdi:Traslados>
+      <cfdi:Traslado Base="8510.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+    </cfdi:Traslados>
+  </cfdi:Impuestos>
+  <cfdi:Complemento>
+    <tfd:TimbreFiscalDigital Version="1.1" UUID="986B43BF-7BB8-4DBF-B183-9B9D2C51048F" FechaTimbrado="2025-12-26T09:07:07" RfcProvCertif="INT020124V62" SelloCFD="T9+Gfn8exA8J5MhM/zLHap1r9jcIQanPT1mc6hUaJGJKbk3RAUW4UBGzPx5tobKeiil8Wy2/03wv5i7dSmJDsE+ma46t6UiQycmXUFtoQw4J3vAMcfezd9IEwgHQYGe1nvsJdsL/A/aLlJuVJs6OHy80vi84nBRc4ntY0C1S1MEbQH2AYVdbIWRsV2dlXVdgIsYGtOZr0DamJUWa9muQgHlSMDz3FPbJcFA5/u8an3S8sVqbDH3kU8iffCoiZju4S7QUOG7T2pW5CojYQiuluZ7Mcu/01m0a+TUI44JIHYCb1iXlmIWQLBC0HCSoD2gS6ooUvuLlfxAKekKOw/XF0g==" NoCertificadoSAT="00001000000708361008" SelloSAT="ZO/jtkQquAeppDikQZI9uxZ8zohEF878b+L6kaqV9di01W0idNArEBjZuHzqc1+mwf5tTczbpraYqjlTIvWmgnlkvDTdvFCgC7odFO+1sjn/e1Ufz4mfJfGXenK/gRsrVll7W0Db3Nl/3qJ0kR+fdu+zDF3L+P02JBkvwAIxVZmu9eJEKEmbNGgU9IsFGCl4t4n8r158wA02NZJqr+YviIzxAS/qfLHxdOfBGr2z/bC1VdnPVB58v2eIzTzReWAHj01eOWOnZ4TapZ3gWAiHUQv6kYkC6oaZG5OMtYWUqZayYAhsZhOAvMjpmEb+Q4Y/k6ooFUXPtw+X5A2Zjr1JAA==" xsi:schemaLocation="http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/TimbreFiscalDigital/TimbreFiscalDigitalv11.xsd" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" />
+  </cfdi:Complemento>
+</cfdi:Comprobante>
