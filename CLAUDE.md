@@ -112,8 +112,94 @@ The project includes MCP server configuration (`.mcp.json`) for direct SQL Serve
 
 ## Critical Implementation Details
 
-- **Articulos calculation**: Uses `int()` truncation, NOT `math.ceil()` - SAV7 original behavior
-- **Paridad field**: Always 1.00 for MXN (not 20.00)
+- **Articulos calculation**: Uses `round()` to match production behavior (199.8 → 200)
+- **Paridad field**: Always 20.00 for MXN (as used in production)
 - **NumOC**: Required field, use 0 as default
 - **Multi-remision**: Single invoice can match up to 5 remisiones (sum must equal total)
 - **Draft detection**: Look for `drafts.` prefix on document IDs when needed
+- **UUID in remisión**: Do NOT store UUID in remisión's TimbradoFolioFiscal field (only in factura F)
+- **Consolidacion field**: Do NOT set Consolidacion=1 in remisión (only set Consolida=1)
+
+## Testing & Reversal Queries
+
+When testing consolidation, use these queries to revert changes in the test database (DBSAV71_TEST).
+
+### Revert a consolidation (delete factura F and restore remisión R)
+
+```sql
+-- ============================================
+-- REVERT CONSOLIDATION - TEMPLATE
+-- Replace {F_NUM} with factura number (e.g., 67766)
+-- Replace {R_NUM} with remisión number (e.g., 45503)
+-- ============================================
+
+-- 1. Delete invoice details (SAVRecD Serie='F')
+DELETE FROM SAVRecD
+WHERE Serie = 'F' AND NumRec = {F_NUM};
+
+-- 2. Delete invoice header (SAVRecC Serie='F')
+DELETE FROM SAVRecC
+WHERE Serie = 'F' AND NumRec = {F_NUM};
+
+-- 3. Restore remisión to original state (SAVRecC Serie='R')
+UPDATE SAVRecC
+SET
+    Estatus = 'No Pagada',
+    Consolidacion = 0,
+    Consolida = 0,
+    ConsolidaSerie = '',
+    ConsolidaNumRec = 0,
+    TimbradoFolioFiscal = '',
+    CancelacionFecha = NULL,
+    CancelacionCapturo = '',
+    CancelacionMotivo = ''
+WHERE Serie = 'R' AND NumRec = {R_NUM};
+
+-- 4. Verify cleanup
+SELECT 'Factura F-{F_NUM}' as Verificacion, COUNT(*) as Registros
+FROM SAVRecC WHERE Serie = 'F' AND NumRec = {F_NUM}
+UNION ALL
+SELECT 'Detalles F-{F_NUM}', COUNT(*)
+FROM SAVRecD WHERE Serie = 'F' AND NumRec = {F_NUM}
+UNION ALL
+SELECT 'Remisión R-{R_NUM} Estatus', 1
+FROM SAVRecC WHERE Serie = 'R' AND NumRec = {R_NUM} AND Estatus = 'No Pagada';
+```
+
+### Compare test vs production
+
+```sql
+-- Compare factura in TEST vs PRODUCTION
+-- Replace {UUID} with the CFDI UUID
+
+-- Factura header comparison
+SELECT 'TEST' as DB, Serie, NumRec, Total, Articulos, TimbradoFolioFiscal
+FROM DBSAV71_TEST.dbo.SAVRecC
+WHERE TimbradoFolioFiscal = '{UUID}' AND Serie = 'F'
+UNION ALL
+SELECT 'PROD', Serie, NumRec, Total, Articulos, TimbradoFolioFiscal
+FROM DBSAV71.dbo.SAVRecC
+WHERE TimbradoFolioFiscal = '{UUID}' AND Serie = 'F';
+
+-- Remisión comparison
+SELECT 'TEST' as DB, Serie, NumRec, Estatus, Consolida, Consolidacion, TimbradoFolioFiscal
+FROM DBSAV71_TEST.dbo.SAVRecC
+WHERE Serie = 'R' AND NumRec = {R_NUM}
+UNION ALL
+SELECT 'PROD', Serie, NumRec, Estatus, Consolida, Consolidacion, TimbradoFolioFiscal
+FROM DBSAV71.dbo.SAVRecC
+WHERE Serie = 'R' AND NumRec = {R_NUM};
+```
+
+### Expected differences between TEST and PRODUCTION
+
+After consolidation, these fields should match production:
+
+| Table | Field | Expected Value |
+|-------|-------|----------------|
+| SAVRecC (F) | TimbradoFolioFiscal | UUID ✓ |
+| SAVRecC (F) | Articulos | round(cantidad) ✓ |
+| SAVRecC (R) | Estatus | 'Consolidada' ✓ |
+| SAVRecC (R) | Consolida | 1 (true) ✓ |
+| SAVRecC (R) | Consolidacion | 0 (false) ✓ |
+| SAVRecC (R) | TimbradoFolioFiscal | NULL/empty ✓ |

@@ -479,7 +479,12 @@ class ConciliacionMatcher:
         # Limitar cantidad para evitar explosión combinatoria
         candidatas = candidatas[:min(len(candidatas), 10)]
 
+        # Contar productos del XML
+        productos_xml = len(factura.conceptos)
+        logger.debug(f"Productos en XML: {productos_xml}")
+
         mejor_combinacion: Optional[MatchScore] = None
+        mejor_con_productos_exactos: Optional[MatchScore] = None
         tolerancia_decimal = factura.total * self.tolerancia_monto
 
         # Probar combinaciones de 2 a MAX_REMISIONES_COMBINACION remisiones
@@ -490,18 +495,39 @@ class ConciliacionMatcher:
 
                 # Si la suma está dentro de la tolerancia
                 if diferencia <= tolerancia_decimal:
+                    # Contar productos de la combinación de remisiones
+                    productos_combo = sum(len(r.detalles) for r in combo)
+
                     score = self._calcular_score_multi(factura, list(combo))
 
+                    # Guardar mejor combinación con productos exactos (preferida)
+                    if productos_combo == productos_xml:
+                        logger.debug(
+                            f"Match por productos: XML={productos_xml}, Combo={productos_combo} "
+                            f"(remisiones: {[r.id_remision for r in combo]})"
+                        )
+                        if mejor_con_productos_exactos is None or score.score_total > mejor_con_productos_exactos.score_total:
+                            mejor_con_productos_exactos = score
+
+                            # Si además es match perfecto por monto, retornar inmediatamente
+                            if score.diferencia_porcentaje <= 0.5:
+                                logger.info(
+                                    f"Encontrada combinación perfecta: {len(combo)} remisiones, "
+                                    f"{productos_combo} productos, diferencia {score.diferencia_porcentaje:.2f}%"
+                                )
+                                return mejor_con_productos_exactos
+
+                    # Mantener lógica existente para mejor combinación general
                     if mejor_combinacion is None or score.score_total > mejor_combinacion.score_total:
                         mejor_combinacion = score
 
-                        # Si encontramos match perfecto, retornar
-                        if score.diferencia_porcentaje <= 0.5:
-                            logger.info(
-                                f"Encontrada combinación perfecta: {len(combo)} remisiones, "
-                                f"diferencia {score.diferencia_porcentaje:.2f}%"
-                            )
-                            return mejor_combinacion
+        # Preferir combinación con productos exactos si existe
+        if mejor_con_productos_exactos:
+            logger.info(
+                f"Mejor combinación (por productos): {len(mejor_con_productos_exactos.remisiones)} remisiones, "
+                f"{productos_xml} productos, diferencia {mejor_con_productos_exactos.diferencia_porcentaje:.2f}%"
+            )
+            return mejor_con_productos_exactos
 
         if mejor_combinacion:
             logger.info(

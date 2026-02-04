@@ -142,7 +142,7 @@ class RemisionesRepository:
                 OR r.{self.config.campo_rfc_proveedor} = ?
             )
             AND r.{self.config.campo_fecha_remision} BETWEEN ? AND ?
-            ORDER BY diferencia_monto ASC, dias_diferencia ASC
+            ORDER BY diferencia_monto ASC, r.{self.config.campo_fecha_remision} ASC
         """
 
         params = (

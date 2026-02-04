@@ -190,7 +190,7 @@ class ConsolidadorSAV7:
                 # 3. Actualizar remisiones como consolidadas (SAVRecC Serie R)
                 for remision in remisiones:
                     self._actualizar_remision_consolidada(
-                        cursor, remision, nuevo_num_rec, factura_sat.uuid
+                        cursor, remision, nuevo_num_rec
                     )
 
             # Si llegamos aquí, la transacción fue exitosa
@@ -245,11 +245,11 @@ class ConsolidadorSAV7:
         subtotal = sum(r.subtotal for r in remisiones)
         iva = sum(r.iva for r in remisiones)
 
-        # Calcular artículos: suma de CANTIDADES de todos los detalles (TRUNCADO como sistema original)
+        # Calcular artículos: suma de CANTIDADES de todos los detalles (REDONDEADO como sistema producción)
         total_articulos = sum(
             sum(d.cantidad for d in r.detalles) for r in remisiones
         )
-        total_articulos = int(total_articulos)  # TRUNCAR como el sistema original (51.4 → 51)
+        total_articulos = round(total_articulos)  # REDONDEAR como el sistema producción (199.8 → 200)
         # Partidas: número de líneas de detalle
         total_partidas = sum(len(r.detalles) for r in remisiones)
 
@@ -310,7 +310,7 @@ class ConsolidadorSAV7:
             'CREDITO',                             # Referencia
             comentario,                            # Comentario
             'PESOS',                               # Moneda
-            Decimal('1.00'),                       # Paridad (1.00 para PESOS)
+            Decimal('20.00'),                      # Paridad (20.00 como sistema producción)
             'Crédito',                             # Tipo
             plazo,                                 # Plazo (días de crédito del proveedor)
             subtotal,                              # SubTotal2
@@ -434,10 +434,13 @@ class ConsolidadorSAV7:
         self,
         cursor,
         remision: Remision,
-        num_factura: int,
-        uuid_factura: str
+        num_factura: int
     ):
-        """Actualizar remisión como consolidada en SAVRecC (Serie R)"""
+        """Actualizar remisión como consolidada en SAVRecC (Serie R)
+
+        Nota: No se guarda el UUID en la remisión (TimbradoFolioFiscal)
+        para coincidir con el comportamiento de producción.
+        """
 
         fecha_actual = datetime.now()
 
@@ -446,11 +449,9 @@ class ConsolidadorSAV7:
             SET
                 Estatus = ?,
                 Saldo = ?,
-                Consolidacion = ?,
                 Consolida = ?,
                 ConsolidaSerie = ?,
                 ConsolidaNumRec = ?,
-                TimbradoFolioFiscal = ?,
                 CancelacionFecha = ?,
                 CancelacionCapturo = ?,
                 CancelacionMotivo = ?,
@@ -462,11 +463,9 @@ class ConsolidadorSAV7:
         params = (
             'Consolidada',                     # Estatus
             Decimal('0'),                      # Saldo
-            1,                                 # Consolidacion
             1,                                 # Consolida (bit: 1=true)
             self.SERIE_FACTURA,                # ConsolidaSerie
             num_factura,                       # ConsolidaNumRec
-            uuid_factura,                      # TimbradoFolioFiscal
             fecha_actual,                      # CancelacionFecha
             self.USUARIO_SISTEMA,              # CancelacionCapturo
             'CONSOLIDACION',                   # CancelacionMotivo

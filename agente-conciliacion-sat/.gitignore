@@ -1,0 +1,32 @@
+# Archivos de configuración sensibles
+.env
+config/credentials.json
+config/*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# Logs
+logs/
+*.log
+
+# Datos locales
+data/xml_facturas/
+data/procesados/
+data/reportes/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
