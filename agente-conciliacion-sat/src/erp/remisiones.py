@@ -215,9 +215,12 @@ class RemisionesRepository:
                 ON r.{self.config.campo_id_proveedor} = p.{self.config.campo_proveedor_id}
             WHERE r.{self.config.campo_serie_remision} = 'R'
             AND r.{self.config.campo_estatus} != 'Consolidada'
-            AND CAST(r.{self.config.campo_numero_remision} AS VARCHAR) = ?
+            AND (
+                CAST(r.{self.config.campo_numero_remision} AS VARCHAR) = ?
+                OR r.{self.config.campo_factura} LIKE ?
+            )
         """
-        params = [num_buscar]
+        params = [num_buscar, f'%{num_buscar}%']
 
         # Nota: serie_buscar ya no se usa porque solo buscamos en Serie R
         # Se mantiene el parámetro por compatibilidad pero se ignora
