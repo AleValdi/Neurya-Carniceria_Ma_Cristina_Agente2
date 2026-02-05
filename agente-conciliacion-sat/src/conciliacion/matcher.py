@@ -50,7 +50,7 @@ class ConciliacionMatcher:
 
     # Umbrales
     SCORE_MINIMO_ACEPTABLE = 0.70  # 70% para considerar match válido
-    MAX_REMISIONES_COMBINACION = 5  # Máximo de remisiones a combinar
+    MAX_REMISIONES_COMBINACION = 10  # Máximo de remisiones a combinar (aumentado de 5 a 10)
 
     def __init__(self, repository: Optional[RemisionesRepository] = None):
         self.repository = repository or RemisionesRepository()
@@ -477,7 +477,8 @@ class ConciliacionMatcher:
             return None
 
         # Limitar cantidad para evitar explosión combinatoria
-        candidatas = candidatas[:min(len(candidatas), 10)]
+        # Aumentado a 15 para permitir encontrar combinaciones de hasta 10 remisiones
+        candidatas = candidatas[:min(len(candidatas), 15)]
 
         # Contar productos del XML
         productos_xml = len(factura.conceptos)
@@ -500,7 +501,15 @@ class ConciliacionMatcher:
 
                     score = self._calcular_score_multi(factura, list(combo))
 
-                    # Guardar mejor combinación con productos exactos (preferida)
+                    # PRIORIDAD 1: Si diferencia es exacta (0 o casi 0), retornar inmediatamente
+                    if diferencia <= Decimal('0.50'):  # Tolerancia de 50 centavos
+                        logger.info(
+                            f"Encontrada combinación EXACTA: {len(combo)} remisiones, "
+                            f"diferencia ${diferencia:.2f}, remisiones: {[r.id_remision for r in combo]}"
+                        )
+                        return score
+
+                    # PRIORIDAD 2: Guardar mejor combinación con productos exactos
                     if productos_combo == productos_xml:
                         logger.debug(
                             f"Match por productos: XML={productos_xml}, Combo={productos_combo} "
@@ -517,8 +526,15 @@ class ConciliacionMatcher:
                                 )
                                 return mejor_con_productos_exactos
 
-                    # Mantener lógica existente para mejor combinación general
-                    if mejor_combinacion is None or score.score_total > mejor_combinacion.score_total:
+                    # PRIORIDAD 3: Mantener mejor combinación por menor diferencia de monto
+                    if mejor_combinacion is None:
+                        mejor_combinacion = score
+                    elif score.diferencia_porcentaje < mejor_combinacion.diferencia_porcentaje:
+                        # Priorizar menor diferencia de monto
+                        mejor_combinacion = score
+                    elif (score.diferencia_porcentaje == mejor_combinacion.diferencia_porcentaje
+                          and score.score_total > mejor_combinacion.score_total):
+                        # Si misma diferencia, usar score total como desempate
                         mejor_combinacion = score
 
         # Preferir combinación con productos exactos si existe
@@ -583,12 +599,10 @@ class ConciliacionMatcher:
         else:
             score_fecha = max(0, 1 - (max_dias / 30))
 
-        # 3. Score por productos (combinado de todas las remisiones)
-        todos_detalles = []
-        for r in remisiones:
-            todos_detalles.extend(r.detalles)
-
-        score_productos = self._calcular_score_productos_lista(factura, todos_detalles)
+        # 3. Score por productos - En multi-remisión usamos score neutral (1.0)
+        # porque es común que la factura tenga productos agregados mientras
+        # las remisiones tienen productos individuales de cada entrega
+        score_productos = 1.0
 
         # Penalización pequeña por usar múltiples remisiones (preferir menos remisiones)
         penalizacion_multi = 0.02 * (len(remisiones) - 1)

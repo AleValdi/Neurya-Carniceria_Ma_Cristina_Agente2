@@ -107,7 +107,9 @@ class RemisionesRepository:
         """
         dias = dias_rango or settings.dias_rango_busqueda
         fecha_inicio = fecha_factura - timedelta(days=dias)
-        fecha_fin = fecha_factura + timedelta(days=dias)
+        # Solo buscar remisiones anteriores o iguales a la fecha de la factura
+        # (no tiene sentido consolidar remisiones que aún no existían)
+        fecha_fin = fecha_factura
 
         # Query con criterios de conciliación para SAV7
         query = f"""
