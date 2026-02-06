@@ -58,6 +58,20 @@ class Settings:
     log_level: str = "INFO"
     log_format: str = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
 
+    # Configuración de adjuntos CFDI
+    cfdi_adjuntos_dir: Path = field(
+        default_factory=lambda: Path(os.getenv(
+            'CFDI_ADJUNTOS_DIR',
+            r'\\SERVERMC\Asesoft\SAV7-1\Recepciones CFDI'
+        ))
+    )
+    cfdi_adjuntos_habilitado: bool = field(
+        default_factory=lambda: os.getenv('CFDI_ADJUNTOS_HABILITADO', 'true').lower() == 'true'
+    )
+    cfdi_generar_pdf: bool = field(
+        default_factory=lambda: os.getenv('CFDI_GENERAR_PDF', 'true').lower() == 'true'
+    )
+
     def __post_init__(self):
         """Crear directorios si no existen"""
         for dir_path in [self.input_dir, self.output_dir, self.processed_dir, self.alertas_dir, self.logs_dir]:

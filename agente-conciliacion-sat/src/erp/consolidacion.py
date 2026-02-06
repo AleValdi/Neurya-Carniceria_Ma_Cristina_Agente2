@@ -110,6 +110,7 @@ class ResultadoConsolidacion:
     remisiones_consolidadas: List[str] = None  # Lista de R-XXXXX
     mensaje: str = ""
     error: Optional[str] = None
+    adjuntos_resultado: Optional[str] = None  # Resultado del proceso de adjuntar archivos
 
     def __post_init__(self):
         if self.remisiones_consolidadas is None:
@@ -124,6 +125,7 @@ class ConsolidadorSAV7:
     1. Crea registro de factura en SAVRecC (Serie F)
     2. Copia detalles de remisiones a SAVRecD (Serie F)
     3. Actualiza remisiones en SAVRecC (Serie R) como consolidadas
+    4. Adjunta archivos XML y PDF al registro (opcional)
     """
 
     SERIE_FACTURA = 'F'
@@ -133,6 +135,15 @@ class ConsolidadorSAV7:
     def __init__(self, connector: Optional[SAV7Connector] = None):
         self.connector = connector or SAV7Connector()
         self.config = sav7_config
+        self._attachment_manager = None
+
+    @property
+    def attachment_manager(self):
+        """Lazy loading del gestor de adjuntos"""
+        if self._attachment_manager is None:
+            from src.cfdi.attachment_manager import AttachmentManager
+            self._attachment_manager = AttachmentManager(self.connector.db)
+        return self._attachment_manager
 
     def consolidar(
         self,
@@ -199,11 +210,15 @@ class ConsolidadorSAV7:
                 f"Consolidación exitosa: F-{nuevo_num_rec} <- {remisiones_ids}"
             )
 
+            # Adjuntar archivos CFDI (no bloquea si falla)
+            adjuntos_msg = self._adjuntar_archivos_cfdi(factura_sat, nuevo_num_rec)
+
             return ResultadoConsolidacion(
                 exito=True,
                 numero_factura_erp=f"F-{nuevo_num_rec}",
                 remisiones_consolidadas=remisiones_ids,
-                mensaje=f"Consolidación exitosa: {len(remisiones)} remisiones -> F-{nuevo_num_rec}"
+                mensaje=f"Consolidación exitosa: {len(remisiones)} remisiones -> F-{nuevo_num_rec}",
+                adjuntos_resultado=adjuntos_msg
             )
 
         except Exception as e:
@@ -213,6 +228,44 @@ class ConsolidadorSAV7:
                 mensaje="Error durante la consolidación",
                 error=str(e)
             )
+
+    def _adjuntar_archivos_cfdi(
+        self,
+        factura: Factura,
+        num_rec: int
+    ) -> Optional[str]:
+        """
+        Adjunta archivos CFDI a la factura consolidada.
+
+        Este proceso NO debe fallar la consolidación. Si hay errores,
+        solo se genera un log/alerta y se continúa.
+
+        Args:
+            factura: Factura SAT con ruta al XML original
+            num_rec: Número de recepción de la factura F creada
+
+        Returns:
+            Mensaje describiendo el resultado, o None si hubo error
+        """
+        try:
+            resultado = self.attachment_manager.adjuntar(
+                factura=factura,
+                num_rec=num_rec,
+                fecha_consolidacion=datetime.now()
+            )
+
+            if resultado.exito:
+                logger.info(f"Archivos CFDI adjuntados para F-{num_rec}: {resultado.nombre_base}")
+                return resultado.mensaje
+            else:
+                logger.warning(
+                    f"No se pudieron adjuntar archivos CFDI para F-{num_rec}: {resultado.error}"
+                )
+                return f"Error adjuntando: {resultado.error}"
+
+        except Exception as e:
+            logger.warning(f"Error en proceso de adjuntos para F-{num_rec} (no bloquea): {e}")
+            return f"Error adjuntando: {str(e)}"
 
     def _obtener_siguiente_numrec(self) -> int:
         """Obtener el siguiente número de recepción para Serie F"""

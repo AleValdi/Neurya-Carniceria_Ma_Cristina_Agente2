@@ -39,6 +39,10 @@ cfdiclient>=1.5.0        # Cliente oficial para Web Service SAT
 # Soporte PDF
 pymupdf>=1.23.0          # Para extraer texto de PDFs (alternativa: pdfplumber)
 
+# Generación de PDF desde CFDI XML (requiere Python 3.10+)
+# satcfdi>=4.4.0         # Para generar representación impresa de facturas electrónicas
+# Nota: Instalar manualmente en servidor si Python >= 3.10: pip install satcfdi
+
 # Sincronización Google Drive
 google-api-python-client>=2.100.0
 google-auth-httplib2>=0.1.1

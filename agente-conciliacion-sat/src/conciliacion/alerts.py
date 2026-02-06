@@ -26,6 +26,7 @@ class CategoriaAlerta(Enum):
     REMISION_DUPLICADA = "REMISION_DUPLICADA"
     REMISION_FALTANTE = "REMISION_FALTANTE"
     MATCH_BAJO = "MATCH_BAJO"
+    ADJUNTO_FALLIDO = "ADJUNTO_FALLIDO"
     OTRO = "OTRO"
 
 
@@ -192,6 +193,23 @@ class AlertManager:
             categoria=CategoriaAlerta.REMISION_DUPLICADA,
             mensaje=f"Remisión vinculada a múltiples facturas: {', '.join(uuid_facturas[:3])}",
             numero_remision=numero_remision,
+        )
+
+    def agregar_adjunto_fallido(
+        self,
+        uuid_factura: str,
+        numero_factura_erp: str,
+        error: str
+    ):
+        """
+        Agregar alerta cuando falla adjuntar archivos CFDI.
+        Severidad BAJA porque no afecta la consolidación.
+        """
+        self.agregar(
+            tipo=TipoAlerta.BAJA,
+            categoria=CategoriaAlerta.ADJUNTO_FALLIDO,
+            mensaje=f"No se pudo adjuntar CFDI a {numero_factura_erp}: {error}",
+            uuid_factura=uuid_factura,
         )
 
     def limpiar(self):
