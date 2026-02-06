@@ -12,7 +12,7 @@ from loguru import logger
 
 # Intentar importar satcfdi (dependencia opcional)
 try:
-    from satcfdi import CFDI
+    from satcfdi.cfdi import CFDI  # Correcto: importar desde satcfdi.cfdi
     from satcfdi import render
     SATCFDI_DISPONIBLE = True
 except ImportError:
