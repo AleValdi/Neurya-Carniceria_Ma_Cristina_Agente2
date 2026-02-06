@@ -3,7 +3,7 @@ Algoritmo de matching para conciliación de facturas con remisiones
 Soporta matching 1:1 y 1:N (una factura a múltiples remisiones)
 Soporta matching por PDF de proveedor (cuando incluye números de remisión)
 """
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Set, Dict
 from datetime import datetime, timedelta
 from decimal import Decimal
 from dataclasses import dataclass, field
@@ -11,6 +11,8 @@ from itertools import combinations
 from pathlib import Path
 from fuzzywuzzy import fuzz
 from loguru import logger
+import numpy as np
+from scipy.optimize import linear_sum_assignment
 
 from config.settings import settings
 from src.sat.models import Factura
@@ -57,6 +59,8 @@ class ConciliacionMatcher:
         self.tolerancia_monto = Decimal(str(settings.tolerancia_monto_porcentaje / 100))
         self.dias_rango = settings.dias_rango_busqueda
         self.umbral_similitud = settings.umbral_similitud_texto
+        # Registro de remisiones ya asignadas (prevención de duplicados)
+        self._remisiones_usadas: Set[str] = set()
 
     def conciliar_factura(self, factura: Factura) -> ResultadoConciliacion:
         """
@@ -107,6 +111,14 @@ class ConciliacionMatcher:
             monto_total=factura.total,
             dias_rango=self.dias_rango
         )
+
+        # Filtrar remisiones ya usadas en esta ejecución (prevención de duplicados)
+        if self._remisiones_usadas:
+            remisiones_filtradas = [r for r in remisiones if r.id_remision not in self._remisiones_usadas]
+            if len(remisiones_filtradas) < len(remisiones):
+                excluidas = len(remisiones) - len(remisiones_filtradas)
+                logger.debug(f"Excluidas {excluidas} remisiones ya asignadas a otras facturas")
+            remisiones = remisiones_filtradas
 
         if not remisiones:
             logger.warning(f"No se encontraron remisiones para factura {factura.uuid}")
@@ -237,6 +249,14 @@ class ConciliacionMatcher:
                 logger.warning(f"Ninguna remisión del PDF encontrada en BD")
                 return None
 
+            # Filtrar remisiones ya usadas (prevención de duplicados)
+            if self._remisiones_usadas:
+                remisiones_encontradas = [r for r in remisiones_encontradas
+                                          if r.id_remision not in self._remisiones_usadas]
+                if not remisiones_encontradas:
+                    logger.warning(f"Remisiones del PDF ya fueron asignadas a otras facturas")
+                    return None
+
             # Calcular totales
             total_remisiones = sum(r.total for r in remisiones_encontradas)
             diferencia = abs(factura.total - total_remisiones)
@@ -319,6 +339,13 @@ class ConciliacionMatcher:
         if not remisiones:
             return None
 
+        # Filtrar remisiones ya usadas (prevención de duplicados)
+        if self._remisiones_usadas:
+            remisiones = [r for r in remisiones if r.id_remision not in self._remisiones_usadas]
+            if not remisiones:
+                logger.warning(f"Remisión {numero} ya fue asignada a otra factura")
+                return None
+
         # Si encontró exactamente una, usarla
         if len(remisiones) == 1:
             remision = remisiones[0]
@@ -393,17 +420,18 @@ class ConciliacionMatcher:
         resultado.es_multi_remision = False
 
         # Determinar si la conciliación es exitosa
+        # Solo aceptar diferencia exacta ($0.00)
         if score.score_total >= self.SCORE_MINIMO_ACEPTABLE:
-            if abs(score.diferencia_porcentaje) <= settings.tolerancia_monto_porcentaje:
+            if abs(score.diferencia_monto) == Decimal('0.00'):
                 resultado.conciliacion_exitosa = True
                 logger.info(
                     f"Conciliación exitosa: Factura {factura.uuid} -> "
-                    f"Remisión {remision.id_remision} (Score: {score.score_total:.2f})"
+                    f"Remisión {remision.id_remision} (Score: {score.score_total:.2f}, Diff: ${score.diferencia_monto:.2f})"
                 )
             else:
                 resultado.alertas.append(
-                    f"DIFERENCIA_MONTO: Diferencia de {score.diferencia_porcentaje:.2f}% "
-                    f"(${score.diferencia_monto:,.2f})"
+                    f"DIFERENCIA_MONTO: Diferencia de ${score.diferencia_monto:,.2f} "
+                    f"({score.diferencia_porcentaje:.2f}%) - Requiere match exacto"
                 )
         else:
             resultado.alertas.append(
@@ -431,18 +459,19 @@ class ConciliacionMatcher:
         resultado.metodo_matching = "multi_remision"
 
         # Determinar si la conciliación es exitosa
+        # Para multi-remisión: solo aceptar diferencia exacta ($0.00)
         if score.score_total >= self.SCORE_MINIMO_ACEPTABLE:
-            if abs(score.diferencia_porcentaje) <= settings.tolerancia_monto_porcentaje:
+            if abs(score.diferencia_monto) == Decimal('0.00'):
                 resultado.conciliacion_exitosa = True
                 nums = ', '.join(r.id_remision for r in score.remisiones)
                 logger.info(
                     f"Conciliación MULTI exitosa: Factura {factura.uuid} -> "
-                    f"Remisiones [{nums}] (Score: {score.score_total:.2f})"
+                    f"Remisiones [{nums}] (Score: {score.score_total:.2f}, Diff: ${score.diferencia_monto:.2f})"
                 )
             else:
                 resultado.alertas.append(
-                    f"DIFERENCIA_MONTO: Diferencia de {score.diferencia_porcentaje:.2f}% "
-                    f"(${score.diferencia_monto:,.2f})"
+                    f"DIFERENCIA_MONTO: Diferencia de ${score.diferencia_monto:,.2f} "
+                    f"({score.diferencia_porcentaje:.2f}%) - Multi-remisión requiere match exacto"
                 )
         else:
             resultado.alertas.append(
@@ -486,7 +515,8 @@ class ConciliacionMatcher:
 
         mejor_combinacion: Optional[MatchScore] = None
         mejor_con_productos_exactos: Optional[MatchScore] = None
-        tolerancia_decimal = factura.total * self.tolerancia_monto
+        # Para multi-remisión: solo buscar combinaciones exactas ($0.00 de diferencia)
+        tolerancia_decimal = Decimal('0.00')
 
         # Probar combinaciones de 2 a MAX_REMISIONES_COMBINACION remisiones
         for num_remisiones in range(2, min(len(candidatas) + 1, self.MAX_REMISIONES_COMBINACION + 1)):
@@ -501,8 +531,8 @@ class ConciliacionMatcher:
 
                     score = self._calcular_score_multi(factura, list(combo))
 
-                    # PRIORIDAD 1: Si diferencia es exacta (0 o casi 0), retornar inmediatamente
-                    if diferencia <= Decimal('0.50'):  # Tolerancia de 50 centavos
+                    # PRIORIDAD 1: Si diferencia es exacta (0), retornar inmediatamente
+                    if diferencia == Decimal('0.00'):  # Solo match exacto
                         logger.info(
                             f"Encontrada combinación EXACTA: {len(combo)} remisiones, "
                             f"diferencia ${diferencia:.2f}, remisiones: {[r.id_remision for r in combo]}"
@@ -665,7 +695,10 @@ class ConciliacionMatcher:
 
     def conciliar_lote(self, facturas: List[Factura]) -> List[ResultadoConciliacion]:
         """
-        Conciliar un lote de facturas
+        Conciliar un lote de facturas usando asignación óptima.
+
+        Usa el algoritmo húngaro para encontrar la asignación global óptima
+        entre facturas y remisiones, evitando el problema de "primer llegado".
 
         Args:
             facturas: Lista de facturas a conciliar
@@ -673,27 +706,271 @@ class ConciliacionMatcher:
         Returns:
             Lista de resultados de conciliación
         """
-        resultados = []
+        # Resetear registro de remisiones usadas al inicio del lote
+        self._remisiones_usadas.clear()
+
         total = len(facturas)
+        logger.info(f"Iniciando conciliación ÓPTIMA de {total} facturas")
 
-        logger.info(f"Iniciando conciliación de {total} facturas")
+        # FASE 1: Recolectar todas las candidatas para cada factura
+        logger.info("Fase 1: Recolectando remisiones candidatas...")
+        candidatas_por_factura: Dict[str, List[Tuple[Remision, MatchScore]]] = {}
+        todas_remisiones: Dict[str, List[Factura]] = {}  # remision_id -> facturas que la quieren
 
-        for i, factura in enumerate(facturas, 1):
-            logger.info(f"Procesando factura {i}/{total}: {factura.identificador}")
+        for factura in facturas:
+            # Buscar remisiones candidatas
+            remisiones = self.repository.buscar_para_conciliacion(
+                rfc_proveedor=factura.rfc_emisor,
+                fecha_factura=factura.fecha_emision,
+                monto_total=factura.total,
+                dias_rango=self.dias_rango
+            )
+
+            if not remisiones:
+                continue
+
+            # Calcular scores para cada remisión candidata
+            candidatas = []
+            for remision in remisiones:
+                score = self._calcular_score(factura, remision)
+                # Solo considerar si tiene monto exacto
+                if score.diferencia_monto == Decimal('0.00'):
+                    candidatas.append((remision, score))
+                    # Registrar qué facturas quieren esta remisión
+                    if remision.id_remision not in todas_remisiones:
+                        todas_remisiones[remision.id_remision] = []
+                    todas_remisiones[remision.id_remision].append(factura)
+
+            # También buscar combinaciones multi-remisión
+            match_multi = self._buscar_combinacion_remisiones(factura, remisiones)
+            if match_multi and match_multi.diferencia_monto == Decimal('0.00'):
+                candidatas.append((match_multi.remisiones, match_multi))
+
+            if candidatas:
+                candidatas_por_factura[factura.uuid] = candidatas
+
+        facturas_con_candidatas = [f for f in facturas if f.uuid in candidatas_por_factura]
+        facturas_sin_candidatas = [f for f in facturas if f.uuid not in candidatas_por_factura]
+
+        # Identificar remisiones en conflicto (más de una factura las quiere)
+        remisiones_en_conflicto = {rid: fs for rid, fs in todas_remisiones.items() if len(fs) > 1}
+        if remisiones_en_conflicto:
+            logger.info(f"  - Remisiones en conflicto: {len(remisiones_en_conflicto)} "
+                       f"(afectan {sum(len(fs) for fs in remisiones_en_conflicto.values())} facturas)")
+
+        logger.info(f"  - {len(facturas_con_candidatas)} facturas con candidatas exactas")
+        logger.info(f"  - {len(facturas_sin_candidatas)} facturas sin candidatas exactas")
+
+        # FASE 2: Resolver asignación óptima usando algoritmo húngaro
+        logger.info("Fase 2: Resolviendo asignación óptima...")
+        asignaciones = self._resolver_asignacion_optima(facturas_con_candidatas, candidatas_por_factura)
+
+        # Registrar remisiones asignadas
+        for factura_uuid, (remision_o_lista, _) in asignaciones.items():
+            if isinstance(remision_o_lista, list):
+                for rem in remision_o_lista:
+                    self._remisiones_usadas.add(rem.id_remision)
+            else:
+                self._remisiones_usadas.add(remision_o_lista.id_remision)
+
+        logger.info(f"  - Asignaciones óptimas: {len(asignaciones)}")
+        logger.info(f"  - Remisiones reservadas: {len(self._remisiones_usadas)}")
+
+        # FASE 3: Aplicar asignaciones y generar resultados
+        logger.info("Fase 3: Aplicando asignaciones...")
+        resultados = []
+
+        # Procesar facturas con asignación óptima
+        for factura in facturas_con_candidatas:
+            resultado = ResultadoConciliacion(
+                uuid_factura=factura.uuid,
+                identificador_factura=factura.identificador,
+                rfc_emisor=factura.rfc_emisor,
+                nombre_emisor=factura.nombre_emisor,
+                fecha_factura=factura.fecha_emision,
+                total_factura=factura.total,
+            )
+
+            if factura.uuid in asignaciones:
+                remision_o_lista, score = asignaciones[factura.uuid]
+
+                if isinstance(remision_o_lista, list):
+                    self._aplicar_resultado_multi(resultado, score, factura)
+                else:
+                    remision = remision_o_lista
+                    resultado.remision = remision
+                    resultado.remisiones = [remision]
+                    resultado.numero_remision = remision.id_remision
+                    resultado.fecha_remision = remision.fecha_remision
+                    resultado.total_remision = remision.total
+                    resultado.score_matching = score.score_total
+                    resultado.diferencia_monto = score.diferencia_monto
+                    resultado.diferencia_porcentaje = score.diferencia_porcentaje
+                    resultado.es_multi_remision = False
+                    resultado.conciliacion_exitosa = True
+            else:
+                # No recibió asignación óptima: las remisiones fueron asignadas a otras facturas
+                # Intentar búsqueda normal que puede encontrar otras opciones
+                resultado_fallback = self.conciliar_factura(factura)
+                if resultado_fallback.conciliacion_exitosa:
+                    resultado = resultado_fallback
+                else:
+                    # No hubo match alternativo
+                    resultado.alertas.append(
+                        "SIN_REMISION_DISPONIBLE: Las remisiones exactas fueron asignadas a otras facturas"
+                    )
+                    if resultado_fallback.remision:
+                        # Hay una remisión pero con diferencia
+                        resultado = resultado_fallback
+
+            resultados.append(resultado)
+
+        # Procesar facturas sin candidatas exactas
+        for factura in facturas_sin_candidatas:
             resultado = self.conciliar_factura(factura)
             resultados.append(resultado)
 
         # Resumen
         exitosos = sum(1 for r in resultados if r.conciliacion_exitosa)
         con_diferencias = sum(1 for r in resultados if r.remision and not r.conciliacion_exitosa)
-        sin_remision = sum(1 for r in resultados if not r.remision)
+        sin_remision = sum(1 for r in resultados if not r.remision and not r.remisiones)
 
         logger.info(
-            f"Conciliación completada: {exitosos} exitosos, "
+            f"Conciliación ÓPTIMA completada: {exitosos} exitosos, "
             f"{con_diferencias} con diferencias, {sin_remision} sin remisión"
         )
 
         return resultados
+
+    def _resolver_asignacion_optima(
+        self,
+        facturas: List[Factura],
+        candidatas_por_factura: Dict[str, List[Tuple[Remision, MatchScore]]]
+    ) -> Dict[str, Tuple[any, MatchScore]]:
+        """
+        Resolver el problema de asignación óptima usando el algoritmo húngaro.
+
+        Cada remisión individual tiene una columna única en la matriz.
+        Para remisiones repetidas con mismo monto, cada una es una columna separada.
+        Esto permite que múltiples facturas de $2,112 se asignen a diferentes
+        remisiones de $2,112.
+
+        Args:
+            facturas: Lista de facturas a asignar
+            candidatas_por_factura: Diccionario de candidatas por UUID de factura
+
+        Returns:
+            Diccionario de asignaciones {uuid_factura: (remision_o_lista, score)}
+        """
+        if not facturas:
+            return {}
+
+        # Recolectar TODAS las remisiones (cada una como columna separada)
+        # Usar índice único para cada remisión individual
+        columnas = []  # Lista de (id_unico, remision_o_lista, score_base)
+
+        # Primero recolectar todas las remisiones individuales únicas
+        remisiones_vistas: Set[str] = set()
+
+        for factura in facturas:
+            if factura.uuid not in candidatas_por_factura:
+                continue
+            for remision_o_lista, score in candidatas_por_factura[factura.uuid]:
+                if isinstance(remision_o_lista, list):
+                    # Multi-remisión: crear ID único basado en sus componentes
+                    rem_id = "MULTI_" + "_".join(sorted(r.id_remision for r in remision_o_lista))
+                    if rem_id not in remisiones_vistas:
+                        remisiones_vistas.add(rem_id)
+                        columnas.append((rem_id, remision_o_lista, score))
+                else:
+                    # Remisión simple: cada una es única
+                    rem_id = remision_o_lista.id_remision
+                    if rem_id not in remisiones_vistas:
+                        remisiones_vistas.add(rem_id)
+                        columnas.append((rem_id, remision_o_lista, score))
+
+        if not columnas:
+            return {}
+
+        n_facturas = len(facturas)
+        n_columnas = len(columnas)
+
+        logger.debug(f"Matriz de asignación: {n_facturas} facturas x {n_columnas} remisiones")
+
+        # Crear matriz de costos (facturas x columnas)
+        COSTO_ALTO = 1000000
+        matriz_costos = np.full((n_facturas, n_columnas), COSTO_ALTO, dtype=float)
+
+        # Mapeo de facturas a índices
+        factura_idx = {f.uuid: i for i, f in enumerate(facturas)}
+
+        # Mapeo de IDs de columna a índices
+        columna_idx = {col[0]: i for i, col in enumerate(columnas)}
+
+        # Llenar costos: para cada factura, marcar sus candidatas
+        for factura in facturas:
+            if factura.uuid not in candidatas_por_factura:
+                continue
+            f_idx = factura_idx[factura.uuid]
+
+            for remision_o_lista, score in candidatas_por_factura[factura.uuid]:
+                if isinstance(remision_o_lista, list):
+                    rem_id = "MULTI_" + "_".join(sorted(r.id_remision for r in remision_o_lista))
+                else:
+                    rem_id = remision_o_lista.id_remision
+
+                if rem_id in columna_idx:
+                    c_idx = columna_idx[rem_id]
+                    # Costo = -(score) + penalización por días
+                    # Menor costo = mejor match
+                    costo = -score.score_total + (score.dias_diferencia * 0.001)
+                    matriz_costos[f_idx, c_idx] = costo
+
+        # Resolver asignación óptima con algoritmo húngaro
+        try:
+            filas_asignadas, cols_asignadas = linear_sum_assignment(matriz_costos)
+        except Exception as e:
+            logger.error(f"Error en asignación óptima: {e}")
+            return {}
+
+        # Construir diccionario de asignaciones
+        asignaciones = {}
+        remisiones_usadas_en_asignacion: Set[str] = set()
+
+        for f_idx, c_idx in zip(filas_asignadas, cols_asignadas):
+            # Verificar que el costo no sea el alto (significa que sí hay match válido)
+            if matriz_costos[f_idx, c_idx] >= COSTO_ALTO - 1:
+                continue
+
+            factura = facturas[f_idx]
+            rem_id, remision_o_lista, _ = columnas[c_idx]
+
+            # Verificar que las remisiones no estén ya usadas
+            # (esto es importante para multi-remisiones que comparten componentes)
+            if rem_id.startswith("MULTI_"):
+                rem_ids_individuales = set(rem_id.replace("MULTI_", "").split("_"))
+                if rem_ids_individuales & remisiones_usadas_en_asignacion:
+                    # Hay solapamiento, saltar
+                    continue
+                remisiones_usadas_en_asignacion.update(rem_ids_individuales)
+            else:
+                if rem_id in remisiones_usadas_en_asignacion:
+                    continue
+                remisiones_usadas_en_asignacion.add(rem_id)
+
+            # Buscar el score específico para esta factura
+            for rem_o_lista, score in candidatas_por_factura[factura.uuid]:
+                if isinstance(rem_o_lista, list):
+                    check_id = "MULTI_" + "_".join(sorted(r.id_remision for r in rem_o_lista))
+                else:
+                    check_id = rem_o_lista.id_remision
+
+                if check_id == rem_id:
+                    asignaciones[factura.uuid] = (remision_o_lista, score)
+                    break
+
+        logger.info(f"  - Asignaciones óptimas encontradas: {len(asignaciones)}")
+        return asignaciones
 
     def _calcular_score(self, factura: Factura, remision: Remision) -> MatchScore:
         """

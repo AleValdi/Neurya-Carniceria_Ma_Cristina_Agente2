@@ -11,6 +11,10 @@ lxml>=4.9.0
 openpyxl>=3.1.0
 pandas>=2.0.0
 
+# Optimización (algoritmo húngaro para asignación óptima)
+scipy>=1.10.0
+numpy>=1.24.0
+
 # Manejo de fechas
 python-dateutil>=2.8.0
 
