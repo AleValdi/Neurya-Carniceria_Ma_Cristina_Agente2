@@ -130,6 +130,10 @@ class SAV7Config:
     campo_proveedor_rfc: str = "RFC"  # RFC
     campo_proveedor_nombre: str = "Empresa"  # Nombre/Razón social
 
+    # Rango reservado para NumRec (evitar colisiones con ERP y otros agentes)
+    # ERP opera en ~68,000 | Agente 2 >= 800,000 | Agente 3 >= 900,000
+    numrec_rango_minimo: int = 800000
+
     @classmethod
     def from_env(cls) -> 'SAV7Config':
         """Crear configuración desde variables de entorno"""
@@ -137,6 +141,7 @@ class SAV7Config:
             tabla_remisiones=os.getenv('SAV7_TABLA_REMISIONES', 'SAVRecC'),
             tabla_detalle_remisiones=os.getenv('SAV7_TABLA_DETALLE', 'SAVRecD'),
             tabla_proveedores=os.getenv('SAV7_TABLA_PROVEEDORES', 'SAVProveedor'),
+            numrec_rango_minimo=int(os.getenv('NUMREC_RANGO_MINIMO', '800000')),
         )
 
 

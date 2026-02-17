@@ -178,16 +178,19 @@ class ConsolidadorSAV7:
             )
 
         try:
-            # Obtener siguiente número de factura
-            nuevo_num_rec = self._obtener_siguiente_numrec()
-
-            logger.info(
-                f"Iniciando consolidación: Factura SAT {factura_sat.folio} -> "
-                f"F-{nuevo_num_rec} con {len(remisiones)} remisiones"
-            )
-
-            # Ejecutar consolidación en transacción
+            # Ejecutar consolidación en transacción unica: SELECT MAX+1 con lock + INSERTs
+            # El UPDLOCK/HOLDLOCK previene que otro proceso obtenga el mismo
+            # NumRec entre el SELECT y el INSERT (race condition detectada
+            # en produccion con F-68949).
             with self.connector.db.get_cursor() as cursor:
+                # Obtener siguiente número DENTRO de la transacción con lock
+                nuevo_num_rec = self._obtener_siguiente_numrec_con_lock(cursor)
+
+                logger.info(
+                    f"Iniciando consolidación: Factura SAT {factura_sat.folio} -> "
+                    f"F-{nuevo_num_rec} con {len(remisiones)} remisiones"
+                )
+
                 # 1. Crear cabecera de factura (SAVRecC Serie F)
                 self._insertar_cabecera_factura(
                     cursor, nuevo_num_rec, factura_sat, remisiones
@@ -268,14 +271,41 @@ class ConsolidadorSAV7:
             return f"Error adjuntando: {str(e)}"
 
     def _obtener_siguiente_numrec(self) -> int:
-        """Obtener el siguiente número de recepción para Serie F"""
+        """Obtener el siguiente número de recepción para Serie F (sin lock, para consultas informativas)"""
         query = f"""
             SELECT ISNULL(MAX(NumRec), 0) + 1 as SiguienteNum
             FROM {self.config.tabla_remisiones}
             WHERE Serie = ?
         """
         result = self.connector.execute_custom_query(query, (self.SERIE_FACTURA,))
-        return result[0]['SiguienteNum'] if result else 1
+        siguiente = result[0]['SiguienteNum'] if result else 1
+        return max(siguiente, self.config.numrec_rango_minimo)
+
+    def _obtener_siguiente_numrec_con_lock(self, cursor) -> int:
+        """
+        Obtener siguiente NumRec DENTRO de la transaccion actual con lock.
+
+        Usa UPDLOCK + HOLDLOCK para bloquear las filas leidas hasta que
+        la transaccion termine (commit o rollback). Esto previene que
+        otro proceso (Agente 3, SAV7 manual) obtenga el mismo NumRec.
+
+        Ademas, aplica rango reservado (numrec_rango_minimo) para que
+        el Agente 2 use numeros >= 800000, separados del rango normal
+        del ERP (~68,000) y del Agente 3 (>= 900,000).
+
+        IMPORTANTE: Este metodo DEBE ejecutarse dentro de un
+        'with self.connector.db.get_cursor() as cursor' que tambien
+        contenga los INSERTs posteriores.
+        """
+        query = f"""
+            SELECT ISNULL(MAX(NumRec), 0) + 1 as SiguienteNum
+            FROM {self.config.tabla_remisiones} WITH (UPDLOCK, HOLDLOCK)
+            WHERE Serie = ?
+        """
+        cursor.execute(query, (self.SERIE_FACTURA,))
+        row = cursor.fetchone()
+        siguiente = row[0] if row else 1
+        return max(siguiente, self.config.numrec_rango_minimo)
 
     def _insertar_cabecera_factura(
         self,
