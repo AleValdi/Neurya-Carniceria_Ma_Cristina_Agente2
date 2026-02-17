@@ -12,7 +12,7 @@ Automated reconciliation agent that matches Mexican electronic invoices (CFDI fr
 # Install dependencies
 pip install -r agente-conciliacion-sat/requirements.txt
 
-# Run reconciliation
+# Run reconciliation (procesa todos los XML en data/xml_facturas/)
 python agente-conciliacion-sat/main.py
 
 # Test database connection
@@ -30,8 +30,20 @@ python agente-conciliacion-sat/main.py --dry-run --verbose
 # Sync from Google Drive and process
 python agente-conciliacion-sat/main.py --sync-drive
 
+# Configure Google Drive interactively
+python agente-conciliacion-sat/main.py --config-drive
+
 # Scheduled execution
 python agente-conciliacion-sat/scheduler.py --hora 07:00
+
+# Scheduler: run once and exit (ideal for Windows Task Scheduler)
+python agente-conciliacion-sat/scheduler.py --una-vez
+
+# Scheduler: run every N minutes
+python agente-conciliacion-sat/scheduler.py --intervalo 30
+
+# Scheduler: watch input folder for new XMLs
+python agente-conciliacion-sat/scheduler.py --monitorear
 
 # Run tests
 python agente-conciliacion-sat/tests/test_xml_parser.py
@@ -40,45 +52,61 @@ python agente-conciliacion-sat/tests/test_xml_parser.py
 python agente-conciliacion-sat/build_exe.py
 ```
 
+### Windows Scripts
+
+- `ejecutar_ahora.bat` — Ejecutar el agente manualmente (doble clic)
+- `instalar_servicio.bat` — Instalar dependencias, crear .env, registrar tarea programada de Windows (requiere admin)
+
 ## Architecture
 
 ```
 agente-conciliacion-sat/
 ├── main.py                    # Entry point - orchestrates the reconciliation flow
-├── scheduler.py               # Task scheduler for automated runs
+├── scheduler.py               # AgentScheduler - scheduled/continuous execution with error tracking
+├── build_exe.py               # PyInstaller build script for Windows .exe
+├── ejecutar_ahora.bat         # Windows: run agent manually
+├── instalar_servicio.bat      # Windows: install as scheduled task
 ├── config/
 │   ├── settings.py            # Dataclass config (Settings, SAV7Config)
-│   └── database.py            # SQL Server connection (pyodbc)
+│   ├── database.py            # SQL Server connection (DatabaseConnection with context manager)
+│   └── GOOGLE_DRIVE_SETUP.md  # Instrucciones para configurar Google Drive
 └── src/
     ├── sat/                   # SAT/CFDI Processing
-    │   ├── xml_parser.py      # CFDIParser class - parses CFDI 4.0/3.3 XML
-    │   ├── models.py          # Factura, Concepto, TipoComprobante
-    │   └── sat_downloader.py  # Download from SAT with FIEL credentials
+    │   ├── xml_parser.py      # CFDIParser - parses CFDI 4.0/3.3 XML
+    │   ├── models.py          # Factura, Concepto, TipoComprobante, MetodoPago
+    │   └── sat_downloader.py  # Download from SAT with FIEL credentials (cfdiclient)
     ├── erp/                   # SAV7 ERP Integration
-    │   ├── sav7_connector.py  # Database connection management
-    │   ├── remisiones.py      # RemisionesRepository - queries SAVRecC/SAVRecD
-    │   ├── models.py          # Remision, DetalleRemision
-    │   └── consolidacion.py   # Creates Serie='F' records (consolidated invoices)
+    │   ├── sav7_connector.py  # SAV7Connector + SAV7Explorer for DB discovery
+    │   ├── remisiones.py      # RemisionesRepository - 4 search strategies
+    │   ├── models.py          # Remision, DetalleRemision, ResultadoConciliacion
+    │   └── consolidacion.py   # ConsolidadorSAV7 - creates Serie='F', numero_a_letra()
     ├── conciliacion/          # Matching Engine
-    │   ├── matcher.py         # ConciliacionMatcher - scoring algorithm
-    │   ├── validator.py       # Data validation
-    │   └── alerts.py          # AlertManager - CRÍTICA/ALTA/MEDIA alerts
+    │   ├── matcher.py         # ConciliacionMatcher - scoring + Hungarian algorithm
+    │   ├── validator.py       # ConciliacionValidator - business rule validation
+    │   └── alerts.py          # AlertManager - registro centralizado de alertas
+    ├── cfdi/                  # CFDI Post-processing
+    │   ├── attachment_manager.py  # AttachmentManager - copia XML/PDF al share de red SAV7
+    │   └── pdf_generator.py       # PDFGenerator - genera PDF con satcfdi (Python 3.10+)
     ├── reports/
-    │   └── excel_generator.py # Multi-sheet Excel reports with openpyxl
+    │   └── excel_generator.py # ExcelReportGenerator - 6 sheets Excel + CSV
     ├── drive/
-    │   └── sync.py            # Google Drive sync
+    │   └── sync.py            # DriveSync - Google Drive (Service Account + OAuth)
     └── pdf/
-        └── extractor.py       # PDF text extraction for remision numbers
+        ├── extractor.py       # PDFRemisionExtractor + PDFIndexer (PyMuPDF/pdfplumber)
+        └── __init__.py
 ```
 
 ## Data Flow
 
 1. **Input**: XML invoices in `data/xml_facturas/` (with optional matching PDFs)
 2. **Parse**: CFDIParser extracts UUID, RFC, amounts, line items from CFDI
-3. **Query**: RemisionesRepository finds matching Serie='R' records by RFC/date/amount
-4. **Match**: ConciliacionMatcher scores matches (100% = perfect, accounts for multi-remision)
-5. **Consolidate**: Creates Serie='F' records in SAVRecC, marks originals as 'Consolidada'
-6. **Report**: Excel with sheets: Resumen, Exitosas, Diferencias, Sin Remisión, Alertas
+3. **PDF Lookup**: PDFIndexer busca PDF companion por UUID; PDFRemisionExtractor extrae numeros de remision/OC
+4. **Query**: RemisionesRepository finds matching Serie='R' records (prioridad: PDF -> numero directo -> heuristico)
+5. **Match**: ConciliacionMatcher scores matches (100% = perfect, accounts for multi-remision up to 10)
+6. **Validate**: ConciliacionValidator aplica reglas de negocio, AlertManager registra alertas
+7. **Consolidate**: ConsolidadorSAV7 creates Serie='F' records, marks originals as 'Consolidada'
+8. **Attach**: AttachmentManager copia XML/PDF al share de red SAV7, actualiza campos FacturaElectronica
+9. **Report**: Excel con 6 sheets: Resumen, Exitosas, Diferencias, Sin Remision, Alertas, Detalle
 
 ## Key Database Tables (SAV7)
 
@@ -87,20 +115,52 @@ agente-conciliacion-sat/
 - **SAVProveedor**: Supplier catalog
 
 Important fields:
-- `TimbradoFolioFiscal`: UUID of the CFDI
-- `Estatus`: 'RECIBIDA' (pending) or 'Consolidada' (matched)
+- `TimbradoFolioFiscal`: UUID of the CFDI (solo en Serie F)
+- `Estatus`: 'RECIBIDA'/'No Pagada' (pending) or 'Consolidada' (matched)
 - `Consolida`: BIT flag (use 1, not 'F')
+- `Consolidacion`: BIT flag (1 solo en Serie F, 0 en Serie R)
+- `FacturaElectronica`: Nombre del archivo XML adjunto
+- `FacturaElectronicaExiste`: BIT (1 si tiene adjunto)
+- `FacturaElectronicaValida`: BIT (1 si el XML es valido)
+- `FacturaElectronicaEstatus`: 'Vigente' cuando esta adjunto
 
 ## Configuration
 
 Environment variables in `.env` (copy from `.env.example`):
 ```env
+# --- Base de Datos SAV7 (SQL Server) ---
 DB_SERVER=localhost
-DB_DATABASE=DBSAV71
-DB_USERNAME=user
-DB_PASSWORD=pass
-DIAS_RANGO_BUSQUEDA=15     # Days ± for matching (default: 15)
-TOLERANCIA_MONTO=2.0       # Acceptable % difference (default: 2%)
+DB_PORT=1433
+DB_DATABASE=DBSAV71_TEST
+DB_USERNAME=devsav7
+DB_PASSWORD=devsav7
+DB_DRIVER={SQL Server Native Client 11.0}
+DB_TRUSTED_CONNECTION=false
+DB_TIMEOUT=30
+
+# --- Conciliacion ---
+TOLERANCIA_MONTO=2.0          # % de tolerancia en montos
+DIAS_RANGO_BUSQUEDA=3         # Dias +/- para buscar remisiones
+DIAS_ALERTA_DESFASE=7         # Alertar si fecha difiere mas de N dias
+UMBRAL_SIMILITUD=80           # % minimo para matching difuso de productos
+
+# --- Logging ---
+LOG_LEVEL=INFO
+
+# --- Adjuntos CFDI ---
+CFDI_ADJUNTOS_DIR=\\SERVERMC\Asesoft\SAV7-1\Recepciones CFDI
+CFDI_ADJUNTOS_HABILITADO=true
+CFDI_GENERAR_PDF=true         # Requiere satcfdi (Python 3.10+)
+
+# --- Tablas SAV7 (override si difieren) ---
+SAV7_TABLA_REMISIONES=SAVRecC
+SAV7_TABLA_DETALLE=SAVRecD
+SAV7_TABLA_PROVEEDORES=SAVProveedor
+
+# --- Descarga automatica SAT (requiere FIEL) ---
+# FIEL_CER_PATH=C:/ruta/a/certificado.cer
+# FIEL_KEY_PATH=C:/ruta/a/llave.key
+# FIEL_PASSWORD=contrasena
 ```
 
 ## MCP Database Access
@@ -110,15 +170,91 @@ The project includes MCP server configuration (`.mcp.json`) for direct SQL Serve
 - Database: `DBSAV71_TEST` (test environment)
 - Use MCP tools to query tables for debugging/verification
 
+### Querying Production Database (DBSAV71)
+
+The MCP connection defaults to `DBSAV71_TEST`. To query the **production database** (`DBSAV71`), use fully qualified table names:
+
+```sql
+-- Query production database from MCP
+SELECT * FROM DBSAV71.dbo.SAVRecC WHERE Serie = 'F' AND NumRec = 68627;
+
+-- Query test database (default)
+SELECT * FROM SAVRecC WHERE Serie = 'F' AND NumRec = 68627;
+-- Or explicitly:
+SELECT * FROM DBSAV71_TEST.dbo.SAVRecC WHERE Serie = 'F' AND NumRec = 68627;
+```
+
+**Important:** Always use `DBSAV71.dbo.TableName` when you need to query or verify production data. The agent runs against production (`DBSAV71`) but MCP tools connect to test by default.
+
 ## Critical Implementation Details
 
-- **Articulos calculation**: Uses `round()` to match production behavior (199.8 → 200)
+- **Articulos calculation**: Uses `round()` to match production behavior (199.8 -> 200)
 - **Paridad field**: Always 20.00 for MXN (as used in production)
 - **NumOC**: Required field, use 0 as default
-- **Multi-remision**: Single invoice can match up to 5 remisiones (sum must equal total)
+- **Multi-remision**: Single invoice can match up to 10 remisiones (sum must equal total, uses `itertools.combinations`)
+- **Solo match exacto**: Diferencia de $0.00 para consolidar automaticamente (tolerancia solo para candidatos)
 - **Draft detection**: Look for `drafts.` prefix on document IDs when needed
-- **UUID in remisión**: Do NOT store UUID in remisión's TimbradoFolioFiscal field (only in factura F)
-- **Consolidacion field**: Do NOT set Consolidacion=1 in remisión (only set Consolida=1)
+- **UUID in remision**: Do NOT store UUID in remision's TimbradoFolioFiscal field (only in factura F)
+- **Consolidacion field**: Do NOT set Consolidacion=1 in remision (only set Consolida=1)
+- **CodProv audit trail**: Al copiar detalles a Serie F, CodProv se marca como "R-XXXXX PN" para trazabilidad
+- **Adjuntos no-bloqueantes**: Si AttachmentManager falla, la consolidacion sigue exitosa
+
+### Matching Algorithm - Search Priority
+
+1. **PDF companion**: Busca PDF por UUID index, extrae numeros de remision/OC con regex
+2. **Numero directo**: Si el XML indica remision en CondicionesDePago o descripcion de conceptos
+3. **Heuristico**: RFC + ventana de fecha + scoring (Monto 50%, Fecha 30%, Productos 20%)
+
+### Matching Algorithm - Batch Optimization
+
+1. Recolectar candidatos y scores por cada factura
+2. Construir matriz de costo, resolver asignacion optima con algoritmo hungaro (`scipy.optimize.linear_sum_assignment`)
+3. Aplicar asignaciones; fallback a matching individual para facturas sin asignar
+4. Set `_remisiones_usadas` previene la misma remision asignada a multiples facturas
+
+### AttachmentManager - Naming Convention
+
+Archivos copiados al share de red SAV7:
+```
+{RFC_EMISOR}_REC_F{NUMREC:06d}_{YYYYMMDD}.xml
+{RFC_EMISOR}_REC_F{NUMREC:06d}_{YYYYMMDD}.pdf
+```
+Ejemplo: `SIS850415B31_REC_F068590_20260206.xml`
+
+### Dependencias Opcionales
+
+Estas dependencias se degradan gracefully (el feature se deshabilita con warning):
+- `satcfdi` - Generacion de PDF desde XML (requiere Python 3.10+)
+- `cfdiclient` - Descarga automatica de CFDI del SAT via SOAP
+- `pymupdf` / `pdfplumber` - Extraccion de texto de PDFs
+- `google-api-python-client` - Sincronizacion con Google Drive
+
+## Key Classes Reference
+
+| Clase | Archivo | Responsabilidad |
+|-------|---------|-----------------|
+| `CFDIParser` | `src/sat/xml_parser.py` | Parsea CFDI 3.3/4.0 XML, extrae datos fiscales |
+| `Factura` | `src/sat/models.py` | Modelo de factura SAT (UUID, RFC, montos, conceptos) |
+| `RemisionesRepository` | `src/erp/remisiones.py` | Queries de lectura contra SAV7 (4 estrategias de busqueda) |
+| `ConsolidadorSAV7` | `src/erp/consolidacion.py` | Escribe en BD: crea Serie F, copia detalles, marca Serie R |
+| `ConciliacionMatcher` | `src/conciliacion/matcher.py` | Motor de matching con algoritmo hungaro para lotes |
+| `ConciliacionValidator` | `src/conciliacion/validator.py` | Validacion de reglas de negocio post-matching |
+| `AlertManager` | `src/conciliacion/alerts.py` | Registro centralizado de alertas (CRITICA/ALTA/MEDIA/BAJA/INFO) |
+| `AttachmentManager` | `src/cfdi/attachment_manager.py` | Copia XML/PDF al share de red, actualiza campos FacturaElectronica |
+| `PDFGenerator` | `src/cfdi/pdf_generator.py` | Genera PDF desde XML con satcfdi |
+| `PDFRemisionExtractor` | `src/pdf/extractor.py` | Extrae numeros de remision/OC desde PDFs |
+| `PDFIndexer` | `src/pdf/extractor.py` | Indice UUID->PDF para busqueda rapida |
+| `ExcelReportGenerator` | `src/reports/excel_generator.py` | Reporte Excel 6 hojas + CSV |
+| `DriveSync` | `src/drive/sync.py` | Sincronizacion Google Drive (Service Account + OAuth) |
+| `AgentScheduler` | `scheduler.py` | Ejecucion programada con tracking de errores |
+| `DatabaseConnection` | `config/database.py` | Wrapper pyodbc con context manager (auto commit/rollback) |
+| `Settings` | `config/settings.py` | Configuracion global desde .env con auto-creacion de directorios |
+
+## Additional Documentation
+
+- `DEPLOYMENT.md` — Guia de despliegue en servidor Windows
+- `QUERIES_REVERTIR_REMISIONES.md` — Templates SQL para revertir consolidaciones en BD de prueba
+- `config/GOOGLE_DRIVE_SETUP.md` — Instrucciones para configurar Google Drive
 
 ## Testing & Reversal Queries
 
