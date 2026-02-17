@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "sqlserver-PRUEBAS": {
+      "command": "npx",
+      "args": ["mssql-mcp-server"],
+      "env": {
+        "MSSQL_HOST": "100.73.181.41",
+        "MSSQL_DATABASE": "DBSAV71_TEST",
+        "MSSQL_USER": "tu_usuario",
+        "MSSQL_PASSWORD": "tu_password",
+        "TrustServerCertificate": "yes"
+      }
+    }
+  }
+}

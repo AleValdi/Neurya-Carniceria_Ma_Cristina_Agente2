@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__mssql__connect_database",
+      "mcp__mssql__execute_query",
+      "mcp__mssql__list_databases",
+      "mcp__mssql__describe_table",
+      "mcp__mssql__disconnect_database",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(source:*)"
+    ]
+  }
+}

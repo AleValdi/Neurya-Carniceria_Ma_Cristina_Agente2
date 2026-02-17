@@ -1,8 +1,10 @@
 # MCP config (contains database credentials)
 .mcp.json
+!.mcp.json.example
 
 # Claude local settings
-.claude/
+.claude/*
+!.claude/settings.local.json.example
 
 # Windows artifacts
 nul

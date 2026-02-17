@@ -163,6 +163,36 @@ SAV7_TABLA_PROVEEDORES=SAVProveedor
 # FIEL_PASSWORD=contrasena
 ```
 
+## Claude Code Setup
+
+Para que otro desarrollador pueda usar Claude Code con este proyecto:
+
+### 1. Configurar MCP SQL Server
+```bash
+cp .mcp.json.example .mcp.json
+# Editar .mcp.json con las credenciales reales de SQL Server
+```
+
+### 2. Configurar permisos de Claude Code (opcional)
+```bash
+mkdir -p .claude
+cp .claude/settings.local.json.example .claude/settings.local.json
+```
+Esto preaprueba permisos para MCP SQL, python, pip y git. Sin este archivo Claude Code pedira confirmacion manual en cada operacion.
+
+### 3. Configurar variables de entorno
+```bash
+cp agente-conciliacion-sat/.env.example agente-conciliacion-sat/.env
+# Editar .env con las credenciales de BD
+```
+
+### 4. Instalar dependencias
+```bash
+pip install -r agente-conciliacion-sat/requirements.txt
+```
+
+**Requisito**: Acceso via Tailscale al servidor `100.73.181.41` (SQL Server).
+
 ## MCP Database Access
 
 The project includes MCP server configuration (`.mcp.json`) for direct SQL Server access:
