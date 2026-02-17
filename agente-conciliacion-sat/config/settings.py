@@ -28,7 +28,9 @@ def get_base_dir() -> Path:
 BASE_DIR = get_base_dir()
 
 # Cargar variables de entorno desde el directorio base
+# .env.local sobreescribe .env (para desarrollo remoto sin modificar .env de produccion)
 load_dotenv(BASE_DIR / '.env')
+load_dotenv(BASE_DIR / '.env.local', override=True)
 
 
 @dataclass
