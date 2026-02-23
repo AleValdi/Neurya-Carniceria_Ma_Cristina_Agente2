@@ -12,6 +12,7 @@ Uso:
     python main.py --config-drive       # Configurar conexión a Google Drive
 """
 import sys
+import shutil
 import argparse
 from pathlib import Path
 from datetime import datetime
@@ -23,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config.settings import settings
 from config.database import DatabaseConnection
 from src.sat.xml_parser import CFDIParser
-from src.sat.models import Factura
+from src.sat.models import Factura, TipoComprobante
 from src.erp.sav7_connector import SAV7Connector, SAV7Explorer
 from src.erp.remisiones import RemisionesRepository
 from src.erp.consolidacion import ConsolidadorSAV7, ResultadoConsolidacion
@@ -215,6 +216,7 @@ def procesar_lote(dry_run: bool = False):
     # Mover XMLs procesados (solo si no es dry-run)
     if not dry_run:
         mover_procesados(facturas)
+        copiar_sin_remision_a_agente3(facturas, resultados)
 
     logger.info("\n" + "=" * 60)
     logger.info("PROCESO COMPLETADO")
@@ -308,6 +310,54 @@ def mover_procesados(facturas):
                     logger.debug(f"Movido: {origen.name} -> processed/")
                 except Exception as e:
                     logger.warning(f"No se pudo mover {origen.name}: {e}")
+
+
+def copiar_sin_remision_a_agente3(facturas, resultados):
+    """Copiar XMLs sin remisión (Ingreso/Egreso) a la carpeta de entrada del Agente 3"""
+    if not settings.agente3_xml_entrada_dir:
+        return
+
+    destino_dir = Path(settings.agente3_xml_entrada_dir)
+    if not destino_dir.exists():
+        logger.warning(f"Carpeta Agente 3 no existe: {destino_dir}")
+        return
+
+    # Mapear UUID -> factura para acceder al tipo y archivo
+    facturas_dict = {f.uuid: f for f in facturas}
+
+    # Filtrar resultados sin remisión
+    sin_remision_uuids = [
+        r.uuid_factura for r in resultados
+        if not r.remision and not r.remisiones
+    ]
+
+    copiados = 0
+    for uuid in sin_remision_uuids:
+        factura = facturas_dict.get(uuid)
+        if not factura or not factura.archivo_xml:
+            continue
+
+        # Solo Ingreso (I) y Egreso (E)
+        if factura.tipo_comprobante not in (TipoComprobante.INGRESO, TipoComprobante.EGRESO):
+            continue
+
+        # Buscar el XML en processed_dir (ya fue movido por mover_procesados)
+        origen = settings.processed_dir / Path(factura.archivo_xml).name
+        if not origen.exists():
+            # Fallback: buscar en la ruta original
+            origen = Path(factura.archivo_xml)
+        if not origen.exists():
+            continue
+
+        try:
+            shutil.copy2(str(origen), str(destino_dir / origen.name))
+            copiados += 1
+            logger.debug(f"Copiado a Agente 3: {origen.name}")
+        except Exception as e:
+            logger.warning(f"No se pudo copiar {origen.name} a Agente 3: {e}")
+
+    if copiados > 0:
+        logger.info(f"Copiados {copiados} XMLs sin remisión a Agente 3: {destino_dir}")
 
 
 def configurar_google_drive():

@@ -59,6 +59,9 @@ class Settings:
     # Descarga SAT
     dias_descarga_sat: int = 3  # Días hacia atrás para descargar del SAT (cubre delay de 72h)
 
+    # Integración Agente 3 (copiar XMLs sin remisión)
+    agente3_xml_entrada_dir: str = ""  # Vacío = deshabilitado
+
     # Configuración de logging
     log_level: str = "INFO"
     log_format: str = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
@@ -92,6 +95,7 @@ class Settings:
             umbral_similitud_texto=int(os.getenv('UMBRAL_SIMILITUD', '80')),
             log_level=os.getenv('LOG_LEVEL', 'INFO'),
             dias_descarga_sat=int(os.getenv('DIAS_DESCARGA_SAT', '3')),
+            agente3_xml_entrada_dir=os.getenv('AGENTE3_XML_ENTRADA_DIR', ''),
         )
 
 
