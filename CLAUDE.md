@@ -96,8 +96,9 @@ agente-conciliacion-sat/
         └── __init__.py
 ```
 
-## Data Flow
+## Data Flow (Scheduler - Ejecucion Diaria)
 
+0. **SAT Download**: SATDownloader descarga XMLs via FIEL (ultimos 3 dias, solo vigentes) a `data/xml_facturas/`
 1. **Input**: XML invoices in `data/xml_facturas/` (with optional matching PDFs)
 2. **Parse**: CFDIParser extracts UUID, RFC, amounts, line items from CFDI
 3. **PDF Lookup**: PDFIndexer busca PDF companion por UUID; PDFRemisionExtractor extrae numeros de remision/OC
@@ -158,9 +159,13 @@ SAV7_TABLA_DETALLE=SAVRecD
 SAV7_TABLA_PROVEEDORES=SAVProveedor
 
 # --- Descarga automatica SAT (requiere FIEL) ---
-# FIEL_CER_PATH=C:/ruta/a/certificado.cer
-# FIEL_KEY_PATH=C:/ruta/a/llave.key
-# FIEL_PASSWORD=contrasena
+FIEL_CER_PATH=C:/Tools/certs/fiel/certificado.cer
+FIEL_KEY_PATH=C:/Tools/certs/fiel/llave_privada.key
+FIEL_PASSWORD=contrasena
+FIEL_RFC=DCM02072238A
+
+# --- Descarga SAT ---
+DIAS_DESCARGA_SAT=3           # Dias hacia atras para descargar del SAT
 ```
 
 ## Claude Code Setup
@@ -255,7 +260,7 @@ Ejemplo: `SIS850415B31_REC_F068590_20260206.xml`
 
 Estas dependencias se degradan gracefully (el feature se deshabilita con warning):
 - `satcfdi` - Generacion de PDF desde XML (requiere Python 3.10+)
-- `cfdiclient` - Descarga automatica de CFDI del SAT via SOAP
+- `cfdiclient>=1.6.0` - Descarga automatica de CFDI del SAT via SOAP (v1.6 usa `SolicitaDescargaRecibidos`)
 - `pymupdf` / `pdfplumber` - Extraccion de texto de PDFs
 - `google-api-python-client` - Sincronizacion con Google Drive
 
@@ -279,6 +284,46 @@ Estas dependencias se degradan gracefully (el feature se deshabilita con warning
 | `AgentScheduler` | `scheduler.py` | Ejecucion programada con tracking de errores |
 | `DatabaseConnection` | `config/database.py` | Wrapper pyodbc con context manager (auto commit/rollback) |
 | `Settings` | `config/settings.py` | Configuracion global desde .env con auto-creacion de directorios |
+
+## Ejecucion Programada (Produccion)
+
+El agente se ejecuta diariamente a las 6:00 AM via Windows Task Scheduler en el servidor:
+
+```
+Programa: C:\Tools\Agente2\agente-conciliacion-satCorrecto\venv\Scripts\python.exe
+Argumentos: scheduler.py --una-vez
+Iniciar en: C:\Tools\Agente2\agente-conciliacion-satCorrecto
+```
+
+**Flujo automatico:**
+1. Descarga XMLs del SAT (ultimos 3 dias, solo `EstadoComprobante='Vigente'`)
+2. Procesa y concilia contra remisiones Serie R
+3. Consolida matches exactos ($0.00 diferencia) creando Serie F
+4. Genera reporte Excel
+5. Termina
+
+**Nota:** `main.py` NO descarga del SAT — solo procesa XMLs locales. La descarga solo ocurre via `scheduler.py`.
+
+### Compatibilidad cfdiclient v1.6
+
+La libreria `cfdiclient>=1.6.0` cambio su API respecto a versiones anteriores:
+- `SolicitaDescarga` → `SolicitaDescargaRecibidos` (clase separada para recibidos)
+- `solicitar_descarga()` acepta `datetime` directamente (no strings)
+- `Fiel` no tiene atributo `.rfc` — el RFC se configura via `FIEL_RFC` en `.env`
+- `estado_comprobante='Vigente'` es obligatorio (SAT ya no permite descargar cancelados)
+- El SAT limita a 2 solicitudes con los mismos parametros antes de bloquear
+
+### Certificados FIEL en servidor
+
+```
+C:\Tools\certs\fiel\
+├── certificado.cer        # DER format (para cfdiclient)
+├── certificado.pem        # PEM format (NO usar con cfdiclient)
+├── llave_privada.key      # DER format (para cfdiclient)
+└── llave_privada.pem      # PEM format (NO usar con cfdiclient)
+```
+
+**Importante:** cfdiclient requiere archivos en formato DER (`.cer`, `.key`), NO PEM (`.pem`).
 
 ## Additional Documentation
 
