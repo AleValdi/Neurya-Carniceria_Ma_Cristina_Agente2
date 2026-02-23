@@ -70,9 +70,9 @@ class AgentScheduler:
             disponible, mensaje = downloader.is_available()
 
             if disponible:
-                logger.info("Descargando facturas del SAT...")
-                # Descargar facturas del último mes
-                fecha_inicio = datetime.now() - timedelta(days=30)
+                dias = settings.dias_descarga_sat
+                logger.info(f"Descargando facturas del SAT (últimos {dias} días)...")
+                fecha_inicio = datetime.now() - timedelta(days=dias)
                 archivos = downloader.descargar_recibidas(fecha_inicio)
                 logger.info(f"Descargados {len(archivos)} XMLs del SAT")
             else:

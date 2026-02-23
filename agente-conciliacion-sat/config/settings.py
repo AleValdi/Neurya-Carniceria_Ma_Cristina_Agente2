@@ -56,6 +56,9 @@ class Settings:
     nombre_reporte: str = "conciliacion_sat_erp"
     incluir_fecha_en_reporte: bool = True
 
+    # Descarga SAT
+    dias_descarga_sat: int = 3  # Días hacia atrás para descargar del SAT (cubre delay de 72h)
+
     # Configuración de logging
     log_level: str = "INFO"
     log_format: str = "{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
@@ -88,6 +91,7 @@ class Settings:
             dias_alerta_desfase=int(os.getenv('DIAS_ALERTA_DESFASE', '7')),
             umbral_similitud_texto=int(os.getenv('UMBRAL_SIMILITUD', '80')),
             log_level=os.getenv('LOG_LEVEL', 'INFO'),
+            dias_descarga_sat=int(os.getenv('DIAS_DESCARGA_SAT', '3')),
         )
 
 

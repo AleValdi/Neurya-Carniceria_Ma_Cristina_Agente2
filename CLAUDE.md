@@ -131,7 +131,7 @@ Environment variables in `.env` (copy from `.env.example`):
 # --- Base de Datos SAV7 (SQL Server) ---
 DB_SERVER=localhost
 DB_PORT=1433
-DB_DATABASE=DBSAV71_TEST
+DB_DATABASE=DBSAV71A
 DB_USERNAME=devsav7
 DB_PASSWORD=devsav7
 DB_DRIVER={SQL Server Native Client 11.0}
@@ -197,12 +197,12 @@ pip install -r agente-conciliacion-sat/requirements.txt
 
 The project includes MCP server configuration (`.mcp.json`) for direct SQL Server access:
 - Server: `sqlserver-PRUEBAS`
-- Database: `DBSAV71_TEST` (test environment)
+- Database: `DBSAV71A` (test environment)
 - Use MCP tools to query tables for debugging/verification
 
 ### Querying Production Database (DBSAV71)
 
-The MCP connection defaults to `DBSAV71_TEST`. To query the **production database** (`DBSAV71`), use fully qualified table names:
+The MCP connection defaults to `DBSAV71A`. To query the **production database** (`DBSAV71`), use fully qualified table names:
 
 ```sql
 -- Query production database from MCP
@@ -211,7 +211,7 @@ SELECT * FROM DBSAV71.dbo.SAVRecC WHERE Serie = 'F' AND NumRec = 68627;
 -- Query test database (default)
 SELECT * FROM SAVRecC WHERE Serie = 'F' AND NumRec = 68627;
 -- Or explicitly:
-SELECT * FROM DBSAV71_TEST.dbo.SAVRecC WHERE Serie = 'F' AND NumRec = 68627;
+SELECT * FROM DBSAV71A.dbo.SAVRecC WHERE Serie = 'F' AND NumRec = 68627;
 ```
 
 **Important:** Always use `DBSAV71.dbo.TableName` when you need to query or verify production data. The agent runs against production (`DBSAV71`) but MCP tools connect to test by default.
@@ -288,7 +288,7 @@ Estas dependencias se degradan gracefully (el feature se deshabilita con warning
 
 ## Testing & Reversal Queries
 
-When testing consolidation, use these queries to revert changes in the test database (DBSAV71_TEST).
+When testing consolidation, use these queries to revert changes in the test database (DBSAV71A).
 
 ### Revert a consolidation (delete factura F and restore remisión R)
 
@@ -340,7 +340,7 @@ FROM SAVRecC WHERE Serie = 'R' AND NumRec = {R_NUM} AND Estatus = 'No Pagada';
 
 -- Factura header comparison
 SELECT 'TEST' as DB, Serie, NumRec, Total, Articulos, TimbradoFolioFiscal
-FROM DBSAV71_TEST.dbo.SAVRecC
+FROM DBSAV71A.dbo.SAVRecC
 WHERE TimbradoFolioFiscal = '{UUID}' AND Serie = 'F'
 UNION ALL
 SELECT 'PROD', Serie, NumRec, Total, Articulos, TimbradoFolioFiscal
@@ -349,7 +349,7 @@ WHERE TimbradoFolioFiscal = '{UUID}' AND Serie = 'F';
 
 -- Remisión comparison
 SELECT 'TEST' as DB, Serie, NumRec, Estatus, Consolida, Consolidacion, TimbradoFolioFiscal
-FROM DBSAV71_TEST.dbo.SAVRecC
+FROM DBSAV71A.dbo.SAVRecC
 WHERE Serie = 'R' AND NumRec = {R_NUM}
 UNION ALL
 SELECT 'PROD', Serie, NumRec, Estatus, Consolida, Consolidacion, TimbradoFolioFiscal

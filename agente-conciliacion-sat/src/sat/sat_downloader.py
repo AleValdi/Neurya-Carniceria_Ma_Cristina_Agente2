@@ -28,7 +28,7 @@ from loguru import logger
 try:
     from cfdiclient import (
         Autenticacion,
-        SolicitaDescarga,
+        SolicitaDescargaRecibidos,
         VerificaSolicitudDescarga,
         DescargaMasiva,
         Fiel
@@ -50,12 +50,6 @@ class TipoDescarga(Enum):
     METADATA = "Metadata"    # Solo metadatos
 
 
-class TipoComprobante(Enum):
-    """Tipo de comprobante"""
-    RECIBIDOS = "RfcReceptor"
-    EMITIDOS = "RfcEmisor"
-
-
 class EstadoSolicitud(Enum):
     """Estados de la solicitud"""
     ACEPTADA = 1
@@ -73,6 +67,7 @@ class FIELConfig:
     cer_path: Path
     key_path: Path
     password: str
+    rfc: str = ""
 
     def __post_init__(self):
         if self.cer_path:
@@ -91,6 +86,7 @@ class FIELConfig:
             cer_path=os.getenv('FIEL_CER_PATH', ''),
             key_path=os.getenv('FIEL_KEY_PATH', ''),
             password=os.getenv('FIEL_PASSWORD', ''),
+            rfc=os.getenv('FIEL_RFC', ''),
         )
 
     def is_valid(self) -> Tuple[bool, str]:
@@ -109,6 +105,9 @@ class FIELConfig:
 
         if not self.password:
             return False, "Contraseña no configurada (FIEL_PASSWORD)"
+
+        if not self.rfc:
+            return False, "RFC no configurado (FIEL_RFC)"
 
         return True, "Configuración válida"
 
@@ -135,7 +134,7 @@ class SATDownloader:
         self.config = fiel_config or FIELConfig.from_env()
         self.output_dir = settings.input_dir
         self._fiel = None
-        self._rfc = None
+        self._rfc = self.config.rfc
 
     def is_available(self) -> Tuple[bool, str]:
         """Verificar si la descarga automática está disponible"""
@@ -158,7 +157,6 @@ class SATDownloader:
                 key_der = f.read()
 
             self._fiel = Fiel(cer_der, key_der, self.config.password)
-            self._rfc = self._fiel.rfc
 
             logger.info(f"FIEL cargada para RFC: {self._rfc}")
 
@@ -214,17 +212,18 @@ class SATDownloader:
 
             # 3. Crear solicitud de descarga
             logger.info("\n[2/4] Creando solicitud de descarga...")
-            solicitud = SolicitaDescarga(fiel)
+            solicitud = SolicitaDescargaRecibidos(fiel)
 
             resultado = solicitud.solicitar_descarga(
-                token=token,
-                rfc_solicitante=self._rfc,
-                fecha_inicial=fecha_inicio.strftime('%Y-%m-%d'),
-                fecha_final=fecha_fin.strftime('%Y-%m-%d'),
+                token,
+                self._rfc,
+                fecha_inicio,
+                fecha_fin,
+                rfc_receptor=self._rfc,
                 tipo_solicitud=tipo_descarga.value,
-                tipo_comprobante=TipoComprobante.RECIBIDOS.value,
-                rfc_emisor=rfc_emisor,
+                estado_comprobante='Vigente',
             )
+            logger.debug(f"Respuesta SAT: {resultado}")
 
             if resultado.get('cod_estatus') != '5000':
                 error = resultado.get('mensaje', 'Error desconocido')
