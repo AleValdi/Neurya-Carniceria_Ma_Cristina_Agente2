@@ -306,7 +306,7 @@ def mover_procesados(facturas):
             if origen.exists():
                 destino = settings.processed_dir / origen.name
                 try:
-                    origen.rename(destino)
+                    shutil.move(str(origen), str(destino))
                     logger.debug(f"Movido: {origen.name} -> processed/")
                 except Exception as e:
                     logger.warning(f"No se pudo mover {origen.name}: {e}")
