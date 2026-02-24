@@ -36,7 +36,8 @@ class ExcelReportGenerator:
         self,
         resultados: List[ResultadoConciliacion],
         alertas: Optional[List[Alerta]] = None,
-        nombre_archivo: Optional[str] = None
+        nombre_archivo: Optional[str] = None,
+        facturas_ya_consolidadas: Optional[List] = None
     ) -> Path:
         """
         Generar reporte Excel completo de conciliación
@@ -45,6 +46,7 @@ class ExcelReportGenerator:
             resultados: Lista de resultados de conciliación
             alertas: Lista de alertas adicionales
             nombre_archivo: Nombre del archivo (sin extensión)
+            facturas_ya_consolidadas: Lista de tuplas (Factura, NumRec) omitidas por ya existir
 
         Returns:
             Ruta al archivo generado
@@ -62,7 +64,7 @@ class ExcelReportGenerator:
         wb = Workbook()
 
         # Hoja 1: Resumen ejecutivo
-        self._crear_hoja_resumen(wb, resultados)
+        self._crear_hoja_resumen(wb, resultados, facturas_ya_consolidadas)
 
         # Hoja 2: Conciliaciones exitosas
         self._crear_hoja_exitosas(wb, resultados)
@@ -79,6 +81,10 @@ class ExcelReportGenerator:
         # Hoja 6: Detalle completo
         self._crear_hoja_detalle(wb, resultados)
 
+        # Hoja 7: Ya consolidadas (si hay)
+        if facturas_ya_consolidadas:
+            self._crear_hoja_ya_consolidadas(wb, facturas_ya_consolidadas)
+
         # Eliminar hoja por defecto si existe
         if 'Sheet' in wb.sheetnames:
             del wb['Sheet']
@@ -92,7 +98,8 @@ class ExcelReportGenerator:
     def _crear_hoja_resumen(
         self,
         wb: Workbook,
-        resultados: List[ResultadoConciliacion]
+        resultados: List[ResultadoConciliacion],
+        facturas_ya_consolidadas: Optional[List] = None
     ):
         """Crear hoja de resumen ejecutivo"""
         ws = wb.create_sheet("Resumen Ejecutivo", 0)
@@ -112,6 +119,7 @@ class ExcelReportGenerator:
         exitosos = sum(1 for r in resultados if r.conciliacion_exitosa)
         con_diferencias = sum(1 for r in resultados if r.remision and not r.conciliacion_exitosa)
         sin_remision = sum(1 for r in resultados if not r.remision)
+        ya_consolidadas = len(facturas_ya_consolidadas) if facturas_ya_consolidadas else 0
 
         # Tabla de resumen
         row = 4
@@ -121,8 +129,11 @@ class ExcelReportGenerator:
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill(start_color=self.COLOR_HEADER, fill_type="solid")
 
+        total_xmls = total + ya_consolidadas
         metricas = [
-            ('Total de facturas procesadas', total, '100%'),
+            ('Total XMLs en carpeta', total_xmls, '100%'),
+            ('Ya consolidadas (omitidas)', ya_consolidadas, f'{(ya_consolidadas/total_xmls*100) if total_xmls else 0:.1f}%'),
+            ('Procesadas', total, f'{(total/total_xmls*100) if total_xmls else 0:.1f}%'),
             ('Conciliaciones exitosas', exitosos, f'{(exitosos/total*100) if total else 0:.1f}%'),
             ('Con diferencias', con_diferencias, f'{(con_diferencias/total*100) if total else 0:.1f}%'),
             ('Sin remisión asociada', sin_remision, f'{(sin_remision/total*100) if total else 0:.1f}%'),
@@ -181,6 +192,7 @@ class ExcelReportGenerator:
         data = []
         for r in exitosos:
             data.append({
+                'NumRec ERP': r.numero_factura_erp or '',
                 'UUID Factura': r.uuid_factura[:8] + '...',
                 'Identificador': r.identificador_factura,
                 'RFC Emisor': r.rfc_emisor,
@@ -325,6 +337,7 @@ class ExcelReportGenerator:
         data = []
         for r in resultados:
             data.append({
+                'NumRec ERP': r.numero_factura_erp or '',
                 'UUID': r.uuid_factura,
                 'Identificador': r.identificador_factura,
                 'RFC Emisor': r.rfc_emisor,
@@ -346,6 +359,26 @@ class ExcelReportGenerator:
         df = pd.DataFrame(data)
         self._escribir_dataframe(ws, df)
         self._aplicar_estilo_tabla(ws, len(df) + 1, len(df.columns))
+
+    def _crear_hoja_ya_consolidadas(self, wb: Workbook, facturas_ya_consolidadas: List):
+        """Crear hoja de facturas omitidas por ya estar consolidadas en BD"""
+        ws = wb.create_sheet("Ya Consolidadas")
+
+        data = []
+        for factura, numrec in facturas_ya_consolidadas:
+            data.append({
+                'NumRec ERP': f"F-{numrec}",
+                'UUID': factura.uuid,
+                'Serie-Folio': f"{factura.serie or ''}-{factura.folio or ''}".strip('-'),
+                'RFC Emisor': factura.rfc_emisor,
+                'Proveedor': factura.nombre_emisor[:40] if factura.nombre_emisor else '',
+                'Fecha Factura': factura.fecha_emision.strftime('%Y-%m-%d') if factura.fecha_emision else '',
+                'Total': float(factura.total),
+            })
+
+        df = pd.DataFrame(data)
+        self._escribir_dataframe(ws, df)
+        self._aplicar_estilo_tabla(ws, len(df) + 1, len(df.columns), color_filas=self.COLOR_GRIS)
 
     def _escribir_dataframe(self, ws, df: pd.DataFrame):
         """Escribir DataFrame en hoja de Excel"""

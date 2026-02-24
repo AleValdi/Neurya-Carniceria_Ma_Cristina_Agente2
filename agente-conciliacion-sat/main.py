@@ -168,6 +168,31 @@ def procesar_lote(dry_run: bool = False):
 
     logger.info(f"Facturas cargadas: {len(facturas)}")
 
+    # 1b. Filtrar facturas cuyo UUID ya existe como Serie F en BD
+    facturas_ya_consolidadas = []
+    try:
+        repo = RemisionesRepository()
+        uuids = [f.uuid for f in facturas if f.uuid]
+        uuids_existentes = repo.buscar_uuids_ya_consolidados(uuids)
+
+        if uuids_existentes:
+            facturas_nuevas = []
+            for f in facturas:
+                if f.uuid and f.uuid.upper() in uuids_existentes:
+                    numrec = uuids_existentes[f.uuid.upper()]
+                    logger.info(f"  Omitido (ya consolidado F-{numrec}): {f.folio or f.uuid[:8]} - {f.nombre_emisor}")
+                    facturas_ya_consolidadas.append((f, numrec))
+                else:
+                    facturas_nuevas.append(f)
+            facturas = facturas_nuevas
+            logger.info(f"  {len(facturas_ya_consolidadas)} ya consolidadas, {len(facturas)} por procesar")
+    except Exception as e:
+        logger.warning(f"No se pudo verificar UUIDs existentes: {e}")
+
+    if not facturas and not facturas_ya_consolidadas:
+        logger.warning("No se encontraron facturas para procesar")
+        return
+
     # 2. Conciliar facturas
     logger.info("\n[2/5] Conciliando facturas con remisiones...")
     matcher = ConciliacionMatcher()
@@ -201,12 +226,26 @@ def procesar_lote(dry_run: bool = False):
         facturas, resultados, dry_run
     )
 
+    # Propagar NumRec de consolidación a resultados para el reporte
+    if resultados_consolidacion:
+        resultados_dict = {r.uuid_factura: r for r in resultados}
+        matches_uuids = [
+            r.uuid_factura for r in resultados
+            if r.conciliacion_exitosa and r.diferencia_porcentaje == 0 and r.remisiones
+        ]
+        for uuid, rc in zip(matches_uuids, resultados_consolidacion):
+            if rc.exito and uuid in resultados_dict:
+                resultados_dict[uuid].numero_factura_erp = rc.numero_factura_erp
+
     # 5. Generar reportes
     logger.info("\n[5/5] Generando reportes...")
     report_generator = ExcelReportGenerator()
 
     # Reporte Excel
-    excel_path = report_generator.generar_reporte(resultados)
+    excel_path = report_generator.generar_reporte(
+        resultados,
+        facturas_ya_consolidadas=facturas_ya_consolidadas
+    )
     logger.info(f"  Excel: {excel_path}")
 
     # Reporte CSV

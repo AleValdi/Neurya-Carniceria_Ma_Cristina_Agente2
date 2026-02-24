@@ -181,6 +181,9 @@ class ResultadoConciliacion:
     # Alertas
     alertas: List[str] = field(default_factory=list)
 
+    # Resultado de consolidación (se llena después del paso de consolidación)
+    numero_factura_erp: Optional[str] = None
+
     # Metadatos
     fecha_procesamiento: datetime = field(default_factory=datetime.now)
     metodo_matching: str = "automatico"

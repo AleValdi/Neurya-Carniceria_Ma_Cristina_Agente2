@@ -458,6 +458,38 @@ class RemisionesRepository:
             tipo_proveedor=str(row.get('tipo_proveedor', '') or ''),
         )
 
+    def buscar_uuids_ya_consolidados(self, uuids: List[str]) -> dict:
+        """
+        Verificar cuáles UUIDs ya tienen factura Serie F en la BD.
+
+        Args:
+            uuids: Lista de UUIDs a verificar
+
+        Returns:
+            Diccionario {uuid_upper: NumRec} para los que ya existen
+        """
+        if not uuids:
+            return {}
+
+        # Normalizar a uppercase
+        uuids_upper = [u.upper() for u in uuids]
+
+        # Construir placeholders
+        placeholders = ','.join(['?' for _ in uuids_upper])
+        query = f"""
+            SELECT UPPER(TimbradoFolioFiscal) as uuid, NumRec
+            FROM {self.config.tabla_remisiones}
+            WHERE Serie = 'F'
+              AND TimbradoFolioFiscal IN ({placeholders})
+        """
+
+        try:
+            results = self.connector.execute_custom_query(query, tuple(uuids_upper))
+            return {row['uuid']: row['NumRec'] for row in results if row.get('uuid')}
+        except Exception as e:
+            logger.warning(f"Error verificando UUIDs consolidados: {e}")
+            return {}
+
     def _map_to_detalle(self, row: dict) -> DetalleRemision:
         """Mapear resultado de query a objeto DetalleRemision"""
         return DetalleRemision(
