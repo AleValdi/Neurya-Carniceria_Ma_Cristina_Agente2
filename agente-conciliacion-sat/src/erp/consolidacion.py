@@ -177,6 +177,15 @@ class ConsolidadorSAV7:
                 error="Solo se consolidan matches al 100%"
             )
 
+        # Verificar UUID antes de consolidar (debe existir siempre)
+        if not factura_sat.uuid or not factura_sat.uuid.strip():
+            logger.critical(f"UUID vacío para factura {factura_sat.folio} de {factura_sat.rfc_emisor} - NO se consolida")
+            return ResultadoConsolidacion(
+                exito=False,
+                mensaje="UUID vacío en la factura SAT",
+                error="TimbradoFolioFiscal quedaría vacío en BD"
+            )
+
         try:
             # Ejecutar consolidación en transacción unica: SELECT MAX+1 con lock + INSERTs
             # El UPDLOCK/HOLDLOCK previene que otro proceso obtenga el mismo
@@ -397,7 +406,7 @@ class ConsolidadorSAV7:
             'Crédito',                             # Tipo
             plazo,                                 # Plazo (días de crédito del proveedor)
             subtotal,                              # SubTotal2
-            factura_sat.folio or '',               # Factura (Folio del XML)
+            factura_sat.folio or (factura_sat.uuid[-4:].upper() if factura_sat.uuid else ''),  # Factura (Folio del XML, o últimos 4 del UUID como SAV7)
             total,                                 # Saldo
             comprador,                             # Capturo
             comprador,                             # CapturoCambio
@@ -408,12 +417,12 @@ class ConsolidadorSAV7:
             'COMPRAS',                             # TipoRecepcion
             1,                                     # Consolidacion
             factura_sat.rfc_emisor,                # RFC
-            factura_sat.uuid,                      # TimbradoFolioFiscal
+            factura_sat.uuid.upper(),              # TimbradoFolioFiscal (normalizar a UPPERCASE)
             factura_sat.fecha_emision,             # FacturaFecha
             sucursal,                              # Sucursal
             'TIENDA',                              # Departamento
             'TIENDA',                              # Afectacion
-            'PPD',                                 # MetododePago
+            factura_sat.metodo_pago.value if factura_sat.metodo_pago else 'PPD',  # MetododePago (del XML)
             0,                                     # NumOC
             total_letra,                           # TotalLetra
             ciudad,                                # Ciudad
