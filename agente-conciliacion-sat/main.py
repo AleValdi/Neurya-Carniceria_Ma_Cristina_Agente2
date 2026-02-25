@@ -168,6 +168,15 @@ def procesar_lote(dry_run: bool = False):
 
     logger.info(f"Facturas cargadas: {len(facturas)}")
 
+    # 1a. Filtrar tipos de comprobante no conciliables (Pago, Traslado, Nómina)
+    tipos_validos = (TipoComprobante.INGRESO, TipoComprobante.EGRESO)
+    facturas_excluidas = [f for f in facturas if f.tipo_comprobante not in tipos_validos]
+    if facturas_excluidas:
+        facturas = [f for f in facturas if f.tipo_comprobante in tipos_validos]
+        for f in facturas_excluidas:
+            logger.info(f"  Excluido (Tipo {f.tipo_comprobante.value}): {f.folio or f.uuid[:8]} - {f.nombre_emisor}")
+        logger.info(f"  {len(facturas_excluidas)} excluidas por tipo, {len(facturas)} por procesar")
+
     # 1b. Filtrar facturas cuyo UUID ya existe como Serie F en BD
     facturas_ya_consolidadas = []
     try:
@@ -254,10 +263,11 @@ def procesar_lote(dry_run: bool = False):
 
     # Mover XMLs procesados (solo si no es dry-run)
     if not dry_run:
-        # Mover facturas procesadas + las ya consolidadas (para que no se acumulen)
+        # Mover facturas procesadas + ya consolidadas + excluidas por tipo
         facturas_a_mover = list(facturas)
         for factura_ya, _ in facturas_ya_consolidadas:
             facturas_a_mover.append(factura_ya)
+        facturas_a_mover.extend(facturas_excluidas)
         mover_procesados(facturas_a_mover)
         copiar_sin_remision_a_agente3(facturas, resultados)
 
