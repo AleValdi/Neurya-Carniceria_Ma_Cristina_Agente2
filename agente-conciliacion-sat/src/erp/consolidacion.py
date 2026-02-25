@@ -348,7 +348,7 @@ class ConsolidadorSAV7:
         # Total en letra
         total_letra = numero_a_letra(total)
 
-        fecha_actual = datetime.now()
+        fecha_actual = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
         # Datos del proveedor (de la remisión base)
         ciudad = remision_base.ciudad_proveedor or 'NO ASIGNADA'
@@ -418,7 +418,7 @@ class ConsolidadorSAV7:
             1,                                     # Consolidacion
             factura_sat.rfc_emisor,                # RFC
             factura_sat.uuid.upper(),              # TimbradoFolioFiscal (normalizar a UPPERCASE)
-            factura_sat.fecha_emision,             # FacturaFecha
+            factura_sat.fecha_emision.replace(hour=0, minute=0, second=0, microsecond=0) if factura_sat.fecha_emision else fecha_actual,  # FacturaFecha (sin hora)
             sucursal,                              # Sucursal
             'TIENDA',                              # Departamento
             'TIENDA',                              # Afectacion
@@ -534,7 +534,7 @@ class ConsolidadorSAV7:
         para coincidir con el comportamiento de producción.
         """
 
-        fecha_actual = datetime.now()
+        fecha_actual = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
         query = f"""
             UPDATE {self.config.tabla_remisiones}

@@ -254,7 +254,11 @@ def procesar_lote(dry_run: bool = False):
 
     # Mover XMLs procesados (solo si no es dry-run)
     if not dry_run:
-        mover_procesados(facturas)
+        # Mover facturas procesadas + las ya consolidadas (para que no se acumulen)
+        facturas_a_mover = list(facturas)
+        for factura_ya, _ in facturas_ya_consolidadas:
+            facturas_a_mover.append(factura_ya)
+        mover_procesados(facturas_a_mover)
         copiar_sin_remision_a_agente3(facturas, resultados)
 
     logger.info("\n" + "=" * 60)
