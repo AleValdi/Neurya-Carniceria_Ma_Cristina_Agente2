@@ -473,14 +473,14 @@ class ConsolidadorSAV7:
                         PorcIva, NumOC, Unidad, Unidad2, Unidad2Valor,
                         Servicio, Registro1, ControlTalla, CodProv, Modelo,
                         Pedimento, Orden, ComplementoIva, CantidadNeta, CostoDif,
-                        Precio, CantidadUM2, Lotes, UltimoCostoC
+                        Precio, CantidadUM2, Lotes, UltimoCostoC, IEPSPorc
                     ) VALUES (
                         ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?
+                        ?, ?, ?, ?, ?
                     )
                 """
 
@@ -514,6 +514,7 @@ class ConsolidadorSAV7:
                     detalle_orig.get('CantidadUM2', 0),              # CantidadUM2
                     detalle_orig.get('Lotes', 0),                    # Lotes
                     detalle_orig.get('UltimoCostoC', 0),             # UltimoCostoC
+                    detalle_orig.get('IEPSPorc', 0),                 # IEPSPorc
                 )
 
                 cursor.execute(query_insert, params)
