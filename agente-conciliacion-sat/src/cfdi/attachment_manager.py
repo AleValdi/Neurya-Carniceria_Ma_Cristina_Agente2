@@ -22,6 +22,7 @@ from config.settings import settings
 from src.cfdi.pdf_generator import PDFGenerator
 
 if TYPE_CHECKING:
+    from decimal import Decimal
     from config.database import DatabaseConnection
     from src.sat.models import Factura
 
@@ -146,7 +147,7 @@ class AttachmentManager:
 
             # 3. Actualizar BD solo si al menos un archivo fue copiado
             if xml_resultado or pdf_resultado:
-                self._actualizar_bd(num_rec, nombre_base)
+                self._actualizar_bd(num_rec, nombre_base, factura.total)
 
             # Construir mensaje de resultado
             archivos = []
@@ -279,13 +280,15 @@ class AttachmentManager:
         logger.warning(f"No se pudo obtener PDF para {factura.uuid[:8]}")
         return None, False
 
-    def _actualizar_bd(self, num_rec: int, nombre_base: str):
+    def _actualizar_bd(self, num_rec: int, nombre_base: str, total_xml: 'Decimal' = None):
         """
         Actualiza campos FacturaElectronica* en SAVRecC.
 
         Args:
             num_rec: Número de recepción de la factura F
             nombre_base: Nombre base del archivo (sin extensión)
+            total_xml: Total del CFDI (XML). Si se proporciona, también se
+                       calcula TotalCostoDif = Total(registro) - total_xml.
 
         Raises:
             Exception si hay error en la actualización
@@ -296,14 +299,21 @@ class AttachmentManager:
                 FacturaElectronica = ?,
                 FacturaElectronicaExiste = 1,
                 FacturaElectronicaValida = 1,
-                FacturaElectronicaEstatus = 'Vigente'
+                FacturaElectronicaEstatus = 'Vigente',
+                FacturaElectronicaEstatusFecha = GETDATE(),
+                FacturaElectronicaTotal = ?,
+                TotalCostoDif = Total - ?
             WHERE Serie = 'F' AND NumRec = ?
         """
 
         try:
+            total_xml_float = float(total_xml) if total_xml is not None else 0
             with self.db.get_cursor() as cursor:
-                cursor.execute(query, (nombre_base, num_rec))
-            logger.debug(f"BD actualizada: FacturaElectronica='{nombre_base}' para F-{num_rec}")
+                cursor.execute(query, (nombre_base, total_xml_float, total_xml_float, num_rec))
+            logger.debug(
+                f"BD actualizada: FacturaElectronica='{nombre_base}', "
+                f"FacturaElectronicaTotal={total_xml_float} para F-{num_rec}"
+            )
         except Exception as e:
             logger.error(f"Error actualizando BD para F-{num_rec}: {e}")
             raise
