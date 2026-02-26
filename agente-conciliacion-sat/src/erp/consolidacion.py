@@ -394,7 +394,7 @@ class ConsolidadorSAV7:
             1,                                     # Procesada
             fecha_actual,                          # FechaAlta
             fecha_actual,                          # UltimoCambio
-            'No Pagada',                           # Estatus
+            'Pendiente',                           # Estatus
             subtotal,                              # SubTotal1
             iva,                                   # Iva
             total,                                 # Total
