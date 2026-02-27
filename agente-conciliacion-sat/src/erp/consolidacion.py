@@ -584,7 +584,9 @@ class ConsolidadorSAV7:
                 CancelacionFecha = ?,
                 CancelacionCapturo = ?,
                 CancelacionMotivo = ?,
-                UltimoCambio = ?
+                UltimoCambio = ?,
+                Procesada = ?,
+                ProcesadaFecha = ?
             WHERE Serie = ?
               AND NumRec = ?
         """
@@ -599,6 +601,8 @@ class ConsolidadorSAV7:
             self.USUARIO_SISTEMA,              # CancelacionCapturo
             'CONSOLIDACION',                   # CancelacionMotivo
             fecha_actual,                      # UltimoCambio
+            1,                                 # Procesada (1 = procesada al consolidar)
+            fecha_actual,                      # ProcesadaFecha
             self.SERIE_REMISION,               # Serie (WHERE)
             remision.numero_remision,          # NumRec (WHERE)
         )
