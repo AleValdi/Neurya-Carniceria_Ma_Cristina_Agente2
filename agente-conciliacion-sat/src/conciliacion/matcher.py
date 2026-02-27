@@ -138,16 +138,31 @@ class ConciliacionMatcher:
         mejor_match_multi: Optional[MatchScore] = None
         mejor_match_multi = self._buscar_combinacion_remisiones(factura, remisiones)
 
-        # Segundo pase: si no encontró match exacto, expandir pool de candidatas
+        # Segundo pase: si no encontró match exacto, expandir rango de fechas y candidatas
+        # Cubre casos PPD donde remisiones son de semanas anteriores
         if mejor_match_multi is None or mejor_match_multi.diferencia_monto != Decimal('0'):
-            candidatas_elegibles = sum(1 for r in remisiones if r.total <= factura.total and not r.esta_facturada)
-            if candidatas_elegibles > 15:
+            DIAS_RANGO_SEGUNDO_PASE = 30
+            logger.info(
+                f"Segundo pase: expandiendo búsqueda a {DIAS_RANGO_SEGUNDO_PASE} días "
+                f"y 30 candidatas para {factura.uuid}"
+            )
+            remisiones_ampliadas = self.repository.buscar_para_conciliacion(
+                rfc_proveedor=factura.rfc_emisor,
+                fecha_factura=factura.fecha_emision,
+                monto_total=factura.total,
+                dias_rango=DIAS_RANGO_SEGUNDO_PASE
+            )
+            # Filtrar remisiones ya usadas
+            if self._remisiones_usadas:
+                remisiones_ampliadas = [r for r in remisiones_ampliadas if r.id_remision not in self._remisiones_usadas]
+
+            if len(remisiones_ampliadas) > len(remisiones):
                 logger.info(
-                    f"Segundo pase multi-remisión: expandiendo a 30 candidatas "
-                    f"({candidatas_elegibles} elegibles) para {factura.uuid}"
+                    f"Segundo pase encontró {len(remisiones_ampliadas)} remisiones "
+                    f"(vs {len(remisiones)} en primer pase)"
                 )
                 segundo_pase = self._buscar_combinacion_remisiones(
-                    factura, remisiones, limite_candidatas=30
+                    factura, remisiones_ampliadas, limite_candidatas=30
                 )
                 if segundo_pase is not None:
                     if mejor_match_multi is None or segundo_pase.score_total > mejor_match_multi.score_total:
