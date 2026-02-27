@@ -138,6 +138,21 @@ class ConciliacionMatcher:
         mejor_match_multi: Optional[MatchScore] = None
         mejor_match_multi = self._buscar_combinacion_remisiones(factura, remisiones)
 
+        # Segundo pase: si no encontró match exacto, expandir pool de candidatas
+        if mejor_match_multi is None or mejor_match_multi.diferencia_monto != Decimal('0'):
+            candidatas_elegibles = sum(1 for r in remisiones if r.total <= factura.total and not r.esta_facturada)
+            if candidatas_elegibles > 15:
+                logger.info(
+                    f"Segundo pase multi-remisión: expandiendo a 30 candidatas "
+                    f"({candidatas_elegibles} elegibles) para {factura.uuid}"
+                )
+                segundo_pase = self._buscar_combinacion_remisiones(
+                    factura, remisiones, limite_candidatas=30
+                )
+                if segundo_pase is not None:
+                    if mejor_match_multi is None or segundo_pase.score_total > mejor_match_multi.score_total:
+                        mejor_match_multi = segundo_pase
+
         # 3. Determinar cuál es el mejor resultado
         usar_multi = False
         if mejor_match_multi and mejor_match_simple:
@@ -485,7 +500,8 @@ class ConciliacionMatcher:
     def _buscar_combinacion_remisiones(
         self,
         factura: Factura,
-        remisiones: List[Remision]
+        remisiones: List[Remision],
+        limite_candidatas: int = 15
     ) -> Optional[MatchScore]:
         """
         Buscar combinación de remisiones que sumen el total de la factura
@@ -506,8 +522,7 @@ class ConciliacionMatcher:
             return None
 
         # Limitar cantidad para evitar explosión combinatoria
-        # Aumentado a 15 para permitir encontrar combinaciones de hasta 10 remisiones
-        candidatas = candidatas[:min(len(candidatas), 15)]
+        candidatas = candidatas[:min(len(candidatas), limite_candidatas)]
 
         # Contar productos del XML
         productos_xml = len(factura.conceptos)
