@@ -337,6 +337,28 @@ class ConsolidadorSAV7:
         subtotal = sum(r.subtotal for r in remisiones)
         iva = sum(r.iva for r in remisiones)
 
+        # Obtener campos IEPS y Retenciones de las remisiones R fuente
+        nums_remision = [r.numero_remision for r in remisiones]
+        placeholders = ','.join(['?' for _ in nums_remision])
+        query_impuestos = f"""
+            SELECT ISNULL(SUM(IEPS), 0) as IEPS,
+                   ISNULL(SUM(IEPSAjuste), 0) as IEPSAjuste,
+                   ISNULL(SUM(RetencionIVA), 0) as RetencionIVA,
+                   ISNULL(SUM(RetencionIvaAjuste), 0) as RetencionIvaAjuste,
+                   ISNULL(SUM(RetencionISR), 0) as RetencionISR,
+                   ISNULL(SUM(RetencionISRAjuste), 0) as RetencionISRAjuste
+            FROM {self.config.tabla_remisiones}
+            WHERE Serie = ? AND NumRec IN ({placeholders})
+        """
+        cursor.execute(query_impuestos, (self.SERIE_REMISION, *nums_remision))
+        row_imp = cursor.fetchone()
+        ieps = row_imp[0] if row_imp else Decimal('0')
+        ieps_ajuste = row_imp[1] if row_imp else Decimal('0')
+        retencion_iva = row_imp[2] if row_imp else Decimal('0')
+        retencion_iva_ajuste = row_imp[3] if row_imp else Decimal('0')
+        retencion_isr = row_imp[4] if row_imp else Decimal('0')
+        retencion_isr_ajuste = row_imp[5] if row_imp else Decimal('0')
+
         # Calcular artículos: suma de CANTIDADES de todos los detalles (REDONDEADO como sistema producción)
         total_articulos = sum(
             sum(d.cantidad for d in r.detalles) for r in remisiones
@@ -369,7 +391,9 @@ class ConsolidadorSAV7:
                 TipoRecepcion, Consolidacion, RFC, TimbradoFolioFiscal,
                 FacturaFecha, Sucursal, Departamento, Afectacion,
                 MetododePago, NumOC, TotalLetra, Ciudad, Estado,
-                TipoProveedor, TotalPrecio, TotalRecibidoNeto, SerieRFC
+                TipoProveedor, TotalPrecio, TotalRecibidoNeto, SerieRFC,
+                IEPS, IEPSAjuste, RetencionIVA, RetencionIvaAjuste,
+                RetencionISR, RetencionISRAjuste
             ) VALUES (
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
@@ -380,7 +404,9 @@ class ConsolidadorSAV7:
                 ?, ?, ?, ?,
                 ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
-                ?, ?, ?, ?
+                ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?
             )
         """
 
@@ -431,6 +457,12 @@ class ConsolidadorSAV7:
             total,                                 # TotalPrecio
             total,                                 # TotalRecibidoNeto
             '',                                    # SerieRFC (vacío por ahora)
+            ieps,                                  # IEPS (suma de remisiones R)
+            ieps_ajuste,                           # IEPSAjuste (suma de remisiones R)
+            retencion_iva,                         # RetencionIVA (suma de remisiones R)
+            retencion_iva_ajuste,                  # RetencionIvaAjuste (suma de remisiones R)
+            retencion_isr,                         # RetencionISR (suma de remisiones R)
+            retencion_isr_ajuste,                  # RetencionISRAjuste (suma de remisiones R)
         )
 
         cursor.execute(query, params)
@@ -473,14 +505,16 @@ class ConsolidadorSAV7:
                         PorcIva, NumOC, Unidad, Unidad2, Unidad2Valor,
                         Servicio, Registro1, ControlTalla, CodProv, Modelo,
                         Pedimento, Orden, ComplementoIva, CantidadNeta, CostoDif,
-                        Precio, CantidadUM2, Lotes, UltimoCostoC, IEPSPorc
+                        Precio, CantidadUM2, Lotes, UltimoCostoC, IEPSPorc,
+                        RetencionIvaPorc, RetencionISRPorc
                     ) VALUES (
                         ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?
+                        ?, ?, ?, ?, ?,
+                        ?, ?
                     )
                 """
 
@@ -515,6 +549,8 @@ class ConsolidadorSAV7:
                     detalle_orig.get('Lotes', 0),                    # Lotes
                     detalle_orig.get('UltimoCostoC', 0),             # UltimoCostoC
                     detalle_orig.get('IEPSPorc', 0),                 # IEPSPorc
+                    detalle_orig.get('RetencionIvaPorc', 0),         # RetencionIvaPorc
+                    detalle_orig.get('RetencionISRPorc', 0),         # RetencionISRPorc
                 )
 
                 cursor.execute(query_insert, params)
