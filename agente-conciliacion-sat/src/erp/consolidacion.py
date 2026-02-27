@@ -417,7 +417,7 @@ class ConsolidadorSAV7:
             remision_base.nombre_proveedor,        # ProveedorNombre
             fecha_actual,                          # Fecha
             comprador,                             # Comprador (del usuario que capturó la remisión)
-            1,                                     # Procesada
+            0,                                     # Procesada (0 = no procesada, el ERP lo marca al procesar)
             fecha_actual,                          # FechaAlta
             fecha_actual,                          # UltimoCambio
             'Pendiente',                           # Estatus
@@ -438,7 +438,7 @@ class ConsolidadorSAV7:
             comprador,                             # CapturoCambio
             int(total_articulos),                  # Articulos (suma de cantidades)
             total_partidas,                        # Partidas (número de líneas)
-            fecha_actual,                          # ProcesadaFecha
+            None,                                  # ProcesadaFecha (NULL = no procesada)
             1,                                     # IntContable
             'COMPRAS',                             # TipoRecepcion
             1,                                     # Consolidacion
